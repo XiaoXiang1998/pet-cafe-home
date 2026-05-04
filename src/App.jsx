@@ -219,6 +219,28 @@ function App() {
   });
   const [reservationMessage, setReservationMessage] = useState('');
   const [language, setLanguage] = useState('zh');
+  const [feedbackForm, setFeedbackForm] = useState({
+    type: 'review',
+    rating: 5,
+    name: '',
+    message: '',
+  });
+  const [feedbackEntries, setFeedbackEntries] = useState([
+    {
+      id: 1,
+      type: 'review',
+      rating: 5,
+      name: 'Mika',
+      message: '店內座位很寬，狗狗推車也放得下，餐點上桌速度穩定。',
+    },
+    {
+      id: 2,
+      type: 'complaint',
+      rating: 3,
+      name: '匿名訪客',
+      message: '尖峰時段等候稍久，希望預約提醒可以再清楚一點。',
+    },
+  ]);
 
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
   const activeHeroScene = heroScenes[heroSceneIndex];
@@ -261,6 +283,24 @@ function App() {
     });
   };
 
+  const handleFeedbackSubmit = (event) => {
+    event.preventDefault();
+    const trimmedMessage = feedbackForm.message.trim();
+    if (!trimmedMessage) return;
+
+    setFeedbackEntries((current) => [
+      {
+        id: Date.now(),
+        type: feedbackForm.type,
+        rating: feedbackForm.rating,
+        name: feedbackForm.name.trim() || user?.name || '匿名訪客',
+        message: trimmedMessage,
+      },
+      ...current,
+    ]);
+    setFeedbackForm((current) => ({ ...current, message: '', name: '' }));
+  };
+
   return (
     <main>
       <nav className="topbar" aria-label="主導覽">
@@ -276,6 +316,7 @@ function App() {
           <a href="#gallery">環景與合照</a>
           <a href="#reserve">預約</a>
           <a href="#menu">菜單</a>
+          <a href="#feedback">評論</a>
         </div>
         <div className="account-menu">
           <button
@@ -519,6 +560,100 @@ function App() {
               </div>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="feedback-section" id="feedback">
+        <div className="section-heading">
+          <div>
+            <p className="section-kicker">Reviews & Complaints</p>
+            <h2>客訴與評論</h2>
+          </div>
+          <p className="feedback-note">目前為前端展示版，之後可串接資料庫保存紀錄。</p>
+        </div>
+
+        <div className="feedback-layout">
+          <article className="feedback-card">
+            <h3>留下你的回饋</h3>
+            <form onSubmit={handleFeedbackSubmit}>
+              <div className="field-row">
+                <label>
+                  類型
+                  <select
+                    value={feedbackForm.type}
+                    onChange={(event) =>
+                      setFeedbackForm((current) => ({ ...current, type: event.target.value }))
+                    }
+                  >
+                    <option value="review">評論</option>
+                    <option value="complaint">客訴</option>
+                  </select>
+                </label>
+                <label>
+                  姓名
+                  <input
+                    value={feedbackForm.name}
+                    onChange={(event) =>
+                      setFeedbackForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                    placeholder="可留空，預設匿名"
+                  />
+                </label>
+              </div>
+
+              <label>
+                評分
+                <div className="rating-stars" role="radiogroup" aria-label="評分星等">
+                  {[1, 2, 3, 4, 5].map((score) => (
+                    <button
+                      className={score <= feedbackForm.rating ? 'active' : ''}
+                      key={score}
+                      type="button"
+                      role="radio"
+                      aria-checked={feedbackForm.rating === score}
+                      onClick={() =>
+                        setFeedbackForm((current) => ({ ...current, rating: score }))
+                      }
+                    >
+                      ★
+                    </button>
+                  ))}
+                  <span>{feedbackForm.rating} / 5</span>
+                </div>
+              </label>
+
+              <label>
+                內容
+                <textarea
+                  rows="5"
+                  value={feedbackForm.message}
+                  onChange={(event) =>
+                    setFeedbackForm((current) => ({ ...current, message: event.target.value }))
+                  }
+                  placeholder="請輸入評論或客訴內容"
+                />
+              </label>
+
+              <button type="submit">送出回饋</button>
+            </form>
+          </article>
+
+          <div className="feedback-list" aria-label="評論與客訴列表">
+            {feedbackEntries.map((entry) => (
+              <article className="feedback-item" key={entry.id}>
+                <div className="feedback-item-head">
+                  <span className={entry.type === 'complaint' ? 'tag complaint' : 'tag'}>
+                    {entry.type === 'complaint' ? '客訴' : '評論'}
+                  </span>
+                  <div className="readonly-stars" aria-label={`${entry.rating} 顆星`}>
+                    {'★'.repeat(entry.rating)}
+                  </div>
+                </div>
+                <h3>{entry.name}</h3>
+                <p>{entry.message}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 

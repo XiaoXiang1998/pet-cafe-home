@@ -58,7 +58,8 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -402,7 +403,8 @@ form button {
 .intro-panel,
 .gallery-section,
 .forms-section,
-.menu-section {
+.menu-section,
+.feedback-section {
   margin: 96px 0;
 }
 
@@ -568,7 +570,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 48px;
   padding: 0 14px;
@@ -579,8 +582,16 @@ select {
   outline: none;
 }
 
+textarea {
+  min-height: 132px;
+  padding: 14px;
+  resize: vertical;
+  line-height: 1.7;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--terracotta);
   box-shadow: 0 0 0 4px rgba(185, 95, 59, 0.14);
 }
@@ -646,6 +657,106 @@ select:focus {
   color: var(--terracotta);
   font-weight: 900;
   white-space: nowrap;
+}
+
+.feedback-note {
+  max-width: 340px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.feedback-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.15fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.feedback-card,
+.feedback-item {
+  border: 1px solid var(--line);
+  border-radius: 36px;
+  background: rgba(255, 247, 234, 0.8);
+  box-shadow: var(--shadow);
+}
+
+.feedback-card {
+  padding: 30px;
+}
+
+.rating-stars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rating-stars button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(61, 42, 29, 0.16);
+  border-radius: 14px;
+  color: rgba(61, 42, 29, 0.28);
+  background: rgba(255, 255, 255, 0.58);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.rating-stars button.active {
+  color: #f5a623;
+  background: rgba(245, 166, 35, 0.14);
+}
+
+.rating-stars span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.feedback-list {
+  display: grid;
+  gap: 16px;
+}
+
+.feedback-item {
+  padding: 22px;
+}
+
+.feedback-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.tag {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: #fff7ea;
+  background: var(--moss);
+  font-weight: 900;
+}
+
+.tag.complaint {
+  background: var(--terracotta);
+}
+
+.readonly-stars {
+  color: #f5a623;
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.feedback-item p {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.8;
 }
 
 footer {
@@ -729,7 +840,8 @@ footer strong {
 
   .hero,
   .intro-panel,
-  .menu-grid {
+  .menu-grid,
+  .feedback-layout {
     grid-template-columns: 1fr;
   }
 
@@ -793,7 +905,8 @@ footer strong {
   }
 
   .intro-panel,
-  .reservation-card {
+  .reservation-card,
+  .feedback-card {
     padding: 22px;
     border-radius: 28px;
   }
