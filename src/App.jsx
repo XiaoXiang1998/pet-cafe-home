@@ -181,10 +181,35 @@ const petLabels = {
   none: '不攜帶寵物',
 };
 
+const heroScenes = [
+  {
+    title: '窗邊迎賓區',
+    description: '狗狗坐在窗邊看著街景，是入店第一眼會看到的安靜座位。',
+    image:
+      'https://images.pexels.com/photos/30785130/pexels-photo-30785130.jpeg?auto=compress&cs=tinysrgb&w=1200&h=900&fit=crop',
+    alt: '狗狗坐在寵物友善咖啡廳窗邊的店內景',
+  },
+  {
+    title: '植物用餐角落',
+    description: '桌椅之間保留毛孩活動空間，適合小型犬在座位旁休息。',
+    image:
+      'https://images.pexels.com/photos/19597985/pexels-photo-19597985.jpeg?auto=compress&cs=tinysrgb&w=1200&h=900&fit=crop',
+    alt: '小狗坐在咖啡廳桌椅下方的植物用餐區',
+  },
+  {
+    title: '木桌吧台視角',
+    description: '木質桌面與暖色背景，呈現毛孩靠近吧台區的日常互動。',
+    image:
+      'https://images.pexels.com/photos/19327030/pexels-photo-19327030.jpeg?auto=compress&cs=tinysrgb&w=1200&h=900&fit=crop',
+    alt: '狗狗在咖啡廳木桌旁看向店內的吧台視角',
+  },
+];
+
 function App() {
   const [user, setUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
+  const [heroSceneIndex, setHeroSceneIndex] = useState(0);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [reservation, setReservation] = useState({
     date: '',
@@ -196,6 +221,7 @@ function App() {
   const [language, setLanguage] = useState('zh');
 
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const activeHeroScene = heroScenes[heroSceneIndex];
   const activePhoto = gallery[galleryIndex];
 
   useEffect(() => {
@@ -312,12 +338,25 @@ function App() {
             </a>
           </div>
         </div>
-        <div className="hero-card" aria-label="店內環景圖">
-          <img
-            src="https://images.pexels.com/photos/30785130/pexels-photo-30785130.jpeg?auto=compress&cs=tinysrgb&w=1200&h=900&fit=crop"
-            alt="狗狗坐在寵物友善咖啡廳窗邊的店內景"
-          />
-          <div className="panorama-badge">寵物友善店內景 360° Mood</div>
+        <div className="hero-card" aria-label="寵物友善店內場景切換">
+          <img src={activeHeroScene.image} alt={activeHeroScene.alt} />
+          <div className="panorama-badge">
+            <span>{activeHeroScene.title}</span>
+            <small>{activeHeroScene.description}</small>
+          </div>
+          <div className="hero-scene-switcher" aria-label="切換店內場景">
+            {heroScenes.map((scene, index) => (
+              <button
+                className={heroSceneIndex === index ? 'active' : ''}
+                key={scene.title}
+                type="button"
+                onClick={() => setHeroSceneIndex(index)}
+              >
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                {scene.title}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
