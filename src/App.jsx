@@ -1,23 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const menuItems = [
   {
-    id: 'salmon-bowl',
+    id: 'salmon-brunch',
     price: 320,
     image:
-      'https://images.unsplash.com/photo-1511690656952-34342bb7c2f2?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=900&q=80',
     labels: {
       zh: {
-        name: '鮭魚舒心早午餐',
-        description: '炙烤鮭魚、溫沙拉、野菇歐姆蛋與寵物友善低鹽調味。',
+        name: '香煎鮭魚早午餐',
+        description: '香煎鮭魚、溫沙拉、野菇歐姆蛋與檸檬優格醬。',
       },
       en: {
-        name: 'Salmon Brunch Plate',
-        description: 'Seared salmon, warm greens, mushroom omelet, and pet-friendly low-sodium seasoning.',
+        name: 'Pan-Seared Salmon Brunch',
+        description: 'Pan-seared salmon, warm salad, mushroom omelet, and lemon yogurt sauce.',
       },
       ja: {
-        name: 'サーモン癒しブランチ',
-        description: '炙りサーモン、温野菜、きのこオムレツ、ペットにやさしい薄味仕立て。',
+        name: 'サーモンブランチ',
+        description: '香ばしく焼いたサーモン、温野菜、きのこオムレツ、レモンヨーグルトソース。',
       },
     },
   },
@@ -42,10 +42,10 @@ const menuItems = [
     },
   },
   {
-    id: 'pet-snack',
+    id: 'pet-chicken-bites',
     price: 140,
     image:
-      'https://images.unsplash.com/photo-1589924691995-400dc9ecc119?auto=format&fit=crop&w=900&q=80',
+      'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&w=900&q=80',
     labels: {
       zh: {
         name: '毛孩雞胸小點',
@@ -61,32 +61,110 @@ const menuItems = [
       },
     },
   },
+  {
+    id: 'garden-pasta',
+    price: 280,
+    image:
+      'https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=900&q=80',
+    labels: {
+      zh: {
+        name: '花園野菇義大利麵',
+        description: '野菇、甜椒、羅勒與橄欖油清炒，味道溫和不厚重。',
+      },
+      en: {
+        name: 'Garden Mushroom Pasta',
+        description: 'Mushrooms, bell peppers, basil, and olive oil in a light cafe-style pasta.',
+      },
+      ja: {
+        name: 'ガーデンきのこパスタ',
+        description: 'きのこ、パプリカ、バジル、オリーブオイルで軽やかに仕上げたパスタ。',
+      },
+    },
+  },
+  {
+    id: 'pumpkin-soup',
+    price: 160,
+    image:
+      'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=900&q=80',
+    labels: {
+      zh: {
+        name: '南瓜暖暖濃湯',
+        description: '南瓜、鮮奶油與烤堅果香氣，適合搭配早午餐。',
+      },
+      en: {
+        name: 'Warm Pumpkin Soup',
+        description: 'Pumpkin, cream, and roasted nut aroma, ideal with brunch plates.',
+      },
+      ja: {
+        name: 'かぼちゃポタージュ',
+        description: 'かぼちゃ、クリーム、ローストナッツの香りを合わせた温かいスープ。',
+      },
+    },
+  },
+  {
+    id: 'berry-waffle',
+    price: 220,
+    image:
+      'https://images.unsplash.com/photo-1562376552-0d160a2f238d?auto=format&fit=crop&w=900&q=80',
+    labels: {
+      zh: {
+        name: '莓果鬆餅盤',
+        description: '現烤鬆餅、莓果、蜂蜜奶油與季節水果。',
+      },
+      en: {
+        name: 'Berry Waffle Plate',
+        description: 'Fresh waffles, berries, honey butter, and seasonal fruit.',
+      },
+      ja: {
+        name: 'ベリーワッフル',
+        description: '焼きたてワッフル、ベリー、ハニーバター、季節のフルーツ。',
+      },
+    },
+  },
 ];
 
 const gallery = [
   {
     title: '午後的窗邊座位',
-    alt: '坐在咖啡廳窗邊的狗',
+    alt: '咖啡廳窗邊的可愛狗狗',
     image:
-      'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=1400&q=80',
   },
   {
-    title: '貓咪陪伴區',
-    alt: '在室內休息的貓',
+    title: '巴哥的貴賓席',
+    alt: '可愛巴哥狗望向鏡頭',
     image:
-      'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1517423440428-a5a00ad493e8?auto=format&fit=crop&w=1400&q=80',
   },
   {
-    title: '朋友聚會合照',
-    alt: '人與狗在咖啡廳聚會',
+    title: '貓咪午後小睡',
+    alt: '可愛貓咪在室內休息',
     image:
-      'https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=1400&q=80',
+  },
+  {
+    title: '柴柴朋友聚會',
+    alt: '狗狗在戶外開心互動',
+    image:
+      'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=1400&q=80',
+  },
+  {
+    title: '貓貓吧台巡邏',
+    alt: '貓咪在咖啡廳桌邊探索',
+    image:
+      'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=1400&q=80',
+  },
+  {
+    title: '大狗也有寬敞座位',
+    alt: '大型犬坐在明亮空間',
+    image:
+      'https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&w=1400&q=80',
   },
   {
     title: '暖光用餐角落',
-    alt: '寵物友善餐廳桌面與咖啡',
+    alt: '咖啡廳桌面與咖啡杯',
     image:
-      'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1400&q=80',
   },
 ];
 
@@ -96,9 +174,18 @@ const translations = {
   ja: '日本語',
 };
 
+const petLabels = {
+  dog: '狗狗',
+  cat: '貓貓',
+  both: '貓貓與狗狗',
+  none: '不攜帶寵物',
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [loginName, setLoginName] = useState('');
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [reservation, setReservation] = useState({
     date: '',
     time: '',
@@ -109,6 +196,15 @@ function App() {
   const [language, setLanguage] = useState('zh');
 
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const activePhoto = gallery[galleryIndex];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setGalleryIndex((current) => (current + 1) % gallery.length);
+    }, 4200);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -116,6 +212,7 @@ function App() {
     if (!trimmedName) return;
     setUser({ name: trimmedName });
     setLoginName('');
+    setAccountOpen(false);
   };
 
   const handleReservation = (event) => {
@@ -125,16 +222,17 @@ function App() {
       return;
     }
 
-    const petLabel = {
-      dog: '狗狗',
-      cat: '貓貓',
-      both: '貓貓與狗狗',
-      none: '不攜帶寵物',
-    }[reservation.pet];
-
     setReservationMessage(
-      `${user?.name ?? '訪客'}，已收到 ${reservation.date} ${reservation.time}，${reservation.people} 位，${petLabel} 的預約需求。`,
+      `${user?.name ?? '訪客'}，已收到 ${reservation.date} ${reservation.time}，${reservation.people} 位，${petLabels[reservation.pet]} 的預約需求。`,
     );
+  };
+
+  const goToPhoto = (direction) => {
+    setGalleryIndex((current) => {
+      const nextIndex = current + direction;
+      if (nextIndex < 0) return gallery.length - 1;
+      return nextIndex % gallery.length;
+    });
   };
 
   return (
@@ -153,7 +251,48 @@ function App() {
           <a href="#reserve">預約</a>
           <a href="#menu">菜單</a>
         </div>
-        <div className="user-pill">{user ? `${user.name} 已登入` : '訪客模式'}</div>
+        <div className="account-menu">
+          <button
+            className="account-button"
+            type="button"
+            aria-expanded={accountOpen}
+            aria-label="會員選單"
+            onClick={() => setAccountOpen((current) => !current)}
+          >
+            <span className="account-icon" aria-hidden="true">
+              <span />
+            </span>
+            <strong>{user ? user.name : '登入'}</strong>
+          </button>
+          {accountOpen && (
+            <div className="account-panel">
+              {user ? (
+                <>
+                  <p>
+                    目前登入：
+                    <strong>{user.name}</strong>
+                  </p>
+                  <button type="button" onClick={() => setUser(null)}>
+                    登出
+                  </button>
+                </>
+              ) : (
+                <form onSubmit={handleLogin}>
+                  <p className="panel-title">登入選項</p>
+                  <label htmlFor="loginName">暱稱</label>
+                  <input
+                    id="loginName"
+                    value={loginName}
+                    onChange={(event) => setLoginName(event.target.value)}
+                    placeholder="例如：小翔"
+                  />
+                  <button type="submit">暫時登入</button>
+                  <small>之後可在這裡串接會員資料庫。</small>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
       </nav>
 
       <section className="hero" id="home">
@@ -195,8 +334,8 @@ function App() {
           </article>
           <article>
             <span>02</span>
-            <h3>登入狀態</h3>
-            <p>輸入暱稱後會綁定目前使用者狀態，預約結果會帶入你的名字。</p>
+            <h3>會員入口</h3>
+            <p>右上角人頭 icon 保留登入入口，後續可串接正式資料庫與會員權限。</p>
           </article>
           <article>
             <span>03</span>
@@ -216,44 +355,35 @@ function App() {
           <p className="section-kicker">Panorama & Friends</p>
           <h2>店內環景與貓貓狗狗合照牆</h2>
         </div>
-        <div className="gallery">
-          {gallery.map((photo) => (
-            <figure key={photo.title}>
-              <img src={photo.image} alt={photo.alt} />
-              <figcaption>{photo.title}</figcaption>
-            </figure>
-          ))}
+        <div className="carousel-shell" aria-label="動物合照輪播">
+          <button className="carousel-arrow prev" type="button" onClick={() => goToPhoto(-1)}>
+            上一張
+          </button>
+          <figure className="carousel-stage">
+            <img src={activePhoto.image} alt={activePhoto.alt} />
+            <figcaption>
+              <span>{String(galleryIndex + 1).padStart(2, '0')}</span>
+              {activePhoto.title}
+            </figcaption>
+          </figure>
+          <button className="carousel-arrow next" type="button" onClick={() => goToPhoto(1)}>
+            下一張
+          </button>
+          <div className="carousel-dots" aria-label="輪播縮圖選擇">
+            {gallery.map((photo, index) => (
+              <button
+                className={galleryIndex === index ? 'active' : ''}
+                key={photo.title}
+                type="button"
+                aria-label={`切換到 ${photo.title}`}
+                onClick={() => setGalleryIndex(index)}
+              />
+            ))}
+          </div>
         </div>
       </section>
 
       <section className="forms-section">
-        <article className="login-card">
-          <p className="section-kicker">Login</p>
-          <h2>會員登入</h2>
-          {user ? (
-            <div className="logged-in">
-              <p>
-                目前登入：
-                <strong>{user.name}</strong>
-              </p>
-              <button type="button" onClick={() => setUser(null)}>
-                登出
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleLogin}>
-              <label htmlFor="loginName">暱稱</label>
-              <input
-                id="loginName"
-                value={loginName}
-                onChange={(event) => setLoginName(event.target.value)}
-                placeholder="例如：小翔"
-              />
-              <button type="submit">登入並綁定狀態</button>
-            </form>
-          )}
-        </article>
-
         <article className="reservation-card" id="reserve">
           <p className="section-kicker">Reservation</p>
           <h2>預約訂位</h2>

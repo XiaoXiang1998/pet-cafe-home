@@ -134,8 +134,7 @@ main {
   gap: 8px;
 }
 
-.nav-links a,
-.user-pill {
+.nav-links a {
   padding: 10px 14px;
   border-radius: 999px;
   color: var(--muted);
@@ -144,10 +143,82 @@ main {
   font-weight: 700;
 }
 
-.user-pill {
+.account-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.account-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 14px 6px 8px;
+  border: 1px solid var(--line);
   color: var(--espresso);
   background: rgba(225, 187, 131, 0.55);
   white-space: nowrap;
+}
+
+.account-icon {
+  position: relative;
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--espresso);
+}
+
+.account-icon::before,
+.account-icon span {
+  display: block;
+  content: '';
+  background: #fff7ea;
+}
+
+.account-icon::before {
+  width: 10px;
+  height: 10px;
+  margin-top: 2px;
+  border-radius: 50%;
+}
+
+.account-icon span {
+  position: absolute;
+  bottom: 7px;
+  width: 18px;
+  height: 9px;
+  border-radius: 999px 999px 4px 4px;
+}
+
+.account-panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 20;
+  width: min(300px, calc(100vw - 36px));
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 247, 234, 0.96);
+  box-shadow: 0 20px 54px rgba(61, 42, 29, 0.2);
+  backdrop-filter: blur(18px);
+}
+
+.account-panel form,
+.account-panel p {
+  margin: 0;
+}
+
+.account-panel small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.panel-title {
+  color: var(--terracotta);
+  font-weight: 900;
 }
 
 .hero {
@@ -186,11 +257,11 @@ h3 {
 }
 
 h1 {
-  max-width: 11ch;
+  max-width: 13ch;
   margin-bottom: 24px;
-  font-size: clamp(3rem, 7vw, 6.8rem);
-  line-height: 0.95;
-  letter-spacing: -0.08em;
+  font-size: clamp(2.45rem, 5vw, 4.8rem);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
 }
 
 h2 {
@@ -222,7 +293,7 @@ h3 {
 .primary-button,
 .secondary-button,
 form button,
-.logged-in button {
+.account-panel button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -238,7 +309,7 @@ form button {
 }
 
 .secondary-button,
-.logged-in button {
+.account-panel button {
   border: 1px solid var(--line);
   color: var(--espresso);
   background: rgba(255, 247, 234, 0.72);
@@ -336,45 +407,92 @@ form button {
   margin-bottom: 26px;
 }
 
-.gallery {
+.carousel-shell {
+  position: relative;
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  grid-auto-rows: 220px;
-  gap: 18px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
 }
 
-.gallery figure {
+.carousel-stage {
   position: relative;
-  min-height: 220px;
+  height: min(64vw, 620px);
+  min-height: 420px;
   overflow: hidden;
   margin: 0;
-  border: 8px solid rgba(255, 247, 234, 0.78);
-  border-radius: 34px;
-  box-shadow: 0 20px 44px rgba(61, 42, 29, 0.15);
+  border: 10px solid rgba(255, 247, 234, 0.82);
+  border-radius: 42px;
+  box-shadow: var(--shadow);
+  background: var(--espresso);
 }
 
-.gallery figure:first-child {
-  grid-row: span 2;
+.carousel-stage img {
+  animation: photo-pop 520ms ease both;
 }
 
-.gallery figcaption {
+.carousel-stage::after {
   position: absolute;
-  left: 16px;
-  bottom: 16px;
-  padding: 10px 14px;
+  inset: 0;
+  content: '';
+  background: linear-gradient(0deg, rgba(61, 42, 29, 0.55), transparent 48%);
+}
+
+.carousel-stage figcaption {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
   border-radius: 999px;
   color: #fff7ea;
-  background: rgba(61, 42, 29, 0.68);
+  background: rgba(61, 42, 29, 0.72);
   font-weight: 900;
+  backdrop-filter: blur(8px);
+}
+
+.carousel-stage figcaption span {
+  color: var(--latte);
+}
+
+.carousel-arrow {
+  width: 78px;
+  min-height: 52px;
+  border: 1px solid var(--line);
+  color: var(--espresso);
+  background: rgba(255, 247, 234, 0.82);
+  box-shadow: 0 12px 30px rgba(61, 42, 29, 0.12);
+}
+
+.carousel-dots {
+  grid-column: 2;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.carousel-dots button {
+  width: 42px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(61, 42, 29, 0.22);
+}
+
+.carousel-dots .active {
+  width: 64px;
+  background: var(--terracotta);
 }
 
 .forms-section {
   display: grid;
-  grid-template-columns: 0.82fr 1.18fr;
-  gap: 22px;
+  grid-template-columns: minmax(0, 780px);
+  justify-content: center;
 }
 
-.login-card,
 .reservation-card,
 .menu-card {
   border: 1px solid var(--line);
@@ -383,7 +501,6 @@ form button {
   box-shadow: var(--shadow);
 }
 
-.login-card,
 .reservation-card {
   padding: 30px;
 }
@@ -424,21 +541,12 @@ select:focus {
   gap: 14px;
 }
 
-.logged-in {
-  display: grid;
-  gap: 18px;
-}
-
-.logged-in p,
 .reservation-message {
+  margin: 18px 0 0;
   padding: 16px;
   border-radius: 20px;
   color: var(--espresso);
   background: rgba(225, 187, 131, 0.44);
-}
-
-.reservation-message {
-  margin: 18px 0 0;
 }
 
 .language-switcher {
@@ -527,6 +635,17 @@ footer strong {
   }
 }
 
+@keyframes photo-pop {
+  from {
+    opacity: 0.7;
+    transform: scale(1.035);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (max-width: 920px) {
   main {
     width: min(100% - 22px, 720px);
@@ -538,13 +657,28 @@ footer strong {
     flex-direction: column;
   }
 
+  .account-menu {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .account-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .account-panel {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
+
   .nav-links {
     justify-content: start;
   }
 
   .hero,
   .intro-panel,
-  .forms-section,
   .menu-grid {
     grid-template-columns: 1fr;
   }
@@ -555,7 +689,24 @@ footer strong {
 
   h1 {
     max-width: 100%;
-    font-size: clamp(3.2rem, 16vw, 5rem);
+    font-size: clamp(2.65rem, 12vw, 4.1rem);
+  }
+
+  .carousel-shell {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .carousel-stage {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .carousel-arrow {
+    width: 100%;
+  }
+
+  .carousel-dots {
+    grid-column: 1 / -1;
   }
 }
 
@@ -565,31 +716,33 @@ footer strong {
     margin-bottom: 34px;
   }
 
-  .hero-card {
+  .hero-card,
+  .carousel-stage {
     height: 420px;
     min-height: 360px;
     border-radius: 30px;
   }
 
   .intro-panel,
-  .login-card,
   .reservation-card {
     padding: 22px;
     border-radius: 28px;
   }
 
   .intro-grid,
-  .field-row,
-  .gallery {
+  .field-row {
     grid-template-columns: 1fr;
   }
 
-  .gallery figure:first-child {
-    grid-row: span 1;
+  .carousel-stage figcaption {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    justify-content: center;
   }
 
-  .gallery {
-    grid-auto-rows: 240px;
+  .carousel-dots button {
+    width: 28px;
   }
 
   .menu-title-row {
