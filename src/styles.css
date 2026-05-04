@@ -684,6 +684,22 @@ textarea:focus {
   padding: 30px;
 }
 
+.feedback-author {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  color: var(--muted);
+  background: rgba(225, 187, 131, 0.34);
+  font-weight: 900;
+}
+
+.feedback-author strong {
+  color: var(--espresso);
+}
+
 .rating-stars {
   display: flex;
   flex-wrap: wrap;

@@ -222,7 +222,6 @@ function App() {
   const [feedbackForm, setFeedbackForm] = useState({
     type: 'review',
     rating: 5,
-    name: '',
     message: '',
   });
   const [feedbackEntries, setFeedbackEntries] = useState([
@@ -293,12 +292,12 @@ function App() {
         id: Date.now(),
         type: feedbackForm.type,
         rating: feedbackForm.rating,
-        name: feedbackForm.name.trim() || user?.name || '匿名訪客',
+        name: user?.name || '匿名訪客',
         message: trimmedMessage,
       },
       ...current,
     ]);
-    setFeedbackForm((current) => ({ ...current, message: '', name: '' }));
+    setFeedbackForm((current) => ({ ...current, message: '' }));
   };
 
   return (
@@ -576,30 +575,23 @@ function App() {
           <article className="feedback-card">
             <h3>留下你的回饋</h3>
             <form onSubmit={handleFeedbackSubmit}>
-              <div className="field-row">
-                <label>
-                  類型
-                  <select
-                    value={feedbackForm.type}
-                    onChange={(event) =>
-                      setFeedbackForm((current) => ({ ...current, type: event.target.value }))
-                    }
-                  >
-                    <option value="review">評論</option>
-                    <option value="complaint">客訴</option>
-                  </select>
-                </label>
-                <label>
-                  姓名
-                  <input
-                    value={feedbackForm.name}
-                    onChange={(event) =>
-                      setFeedbackForm((current) => ({ ...current, name: event.target.value }))
-                    }
-                    placeholder="可留空，預設匿名"
-                  />
-                </label>
-              </div>
+              <label>
+                類型
+                <select
+                  value={feedbackForm.type}
+                  onChange={(event) =>
+                    setFeedbackForm((current) => ({ ...current, type: event.target.value }))
+                  }
+                >
+                  <option value="review">評論</option>
+                  <option value="complaint">客訴</option>
+                </select>
+              </label>
+
+              <p className="feedback-author">
+                顯示名稱：
+                <strong>{user?.name || '匿名訪客'}</strong>
+              </p>
 
               <label>
                 評分
