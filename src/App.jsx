@@ -314,10 +314,10 @@ function App() {
         </div>
         <div className="hero-card" aria-label="店內環景圖">
           <img
-            src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=80"
-            alt="小翔動物友善餐廳店內環景座位"
+            src="https://images.pexels.com/photos/30785130/pexels-photo-30785130.jpeg?auto=compress&cs=tinysrgb&w=1200&h=900&fit=crop"
+            alt="狗狗坐在寵物友善咖啡廳窗邊的店內景"
           />
-          <div className="panorama-badge">店內環景圖 360° Mood</div>
+          <div className="panorama-badge">寵物友善店內景 360° Mood</div>
         </div>
       </section>
 
