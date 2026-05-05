@@ -775,12 +775,6 @@ textarea:focus {
   white-space: nowrap;
 }
 
-.feedback-note {
-  max-width: 340px;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
 .feedback-layout {
   display: grid;
   grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.15fr);
@@ -814,6 +808,15 @@ textarea:focus {
 
 .feedback-author strong {
   color: var(--espresso);
+}
+
+.feedback-message {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  color: var(--espresso);
+  background: rgba(225, 187, 131, 0.44);
+  line-height: 1.7;
 }
 
 .rating-stars {

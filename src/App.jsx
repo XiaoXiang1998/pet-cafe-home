@@ -272,6 +272,7 @@ function App() {
     rating: 5,
     message: '',
   });
+  const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackEntries, setFeedbackEntries] = useState([
     {
       id: 1,
@@ -342,7 +343,7 @@ function App() {
       .limit(20);
 
     if (error) {
-      setAuthMessage(`讀取評論失敗：${error.message}`);
+      setFeedbackMessage(`讀取評論失敗：${error.message}`);
       return;
     }
 
@@ -626,11 +627,14 @@ function App() {
   const handleFeedbackSubmit = async (event) => {
     event.preventDefault();
     const trimmedMessage = feedbackForm.message.trim();
-    if (!trimmedMessage) return;
+    if (!trimmedMessage) {
+      setFeedbackMessage('請先輸入評論或客訴內容。');
+      return;
+    }
 
     if (isSupabaseConfigured) {
       if (!authUser) {
-        setAuthMessage('請先使用右上角會員登入，再送出評論或客訴。');
+        setFeedbackMessage('請先使用右上角會員登入，再送出評論或客訴。');
         return;
       }
 
@@ -643,12 +647,12 @@ function App() {
       });
 
       if (error) {
-        setAuthMessage(`送出回饋失敗：${error.message}`);
+        setFeedbackMessage(`送出回饋失敗：${error.message}`);
         return;
       }
 
       setFeedbackForm((current) => ({ ...current, message: '' }));
-      setAuthMessage('回饋已送出並存入資料庫。');
+      setFeedbackMessage('回饋已送出並存入資料庫。');
       loadFeedbacks();
       return;
     }
@@ -664,6 +668,7 @@ function App() {
       ...current,
     ]);
     setFeedbackForm((current) => ({ ...current, message: '' }));
+    setFeedbackMessage('回饋已送出。');
   };
 
   return (
@@ -1072,7 +1077,6 @@ function App() {
             <p className="section-kicker">Reviews & Complaints</p>
             <h2>客訴與評論</h2>
           </div>
-          <p className="feedback-note">目前為前端展示版，之後可串接資料庫保存紀錄。</p>
         </div>
 
         <div className="feedback-layout">
@@ -1132,6 +1136,7 @@ function App() {
 
               <button type="submit">送出回饋</button>
             </form>
+            {feedbackMessage && <p className="feedback-message">{feedbackMessage}</p>}
           </article>
 
           <div className="feedback-list" aria-label="評論與客訴列表">
