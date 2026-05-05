@@ -111,3 +111,17 @@ on public.feedbacks
 for select
 to authenticated
 using (type = 'complaint' and auth.uid() = user_id);
+
+grant usage on schema public to anon, authenticated;
+
+grant select on public.feedbacks to anon;
+grant select on public.feedbacks to authenticated;
+grant insert on public.feedbacks to authenticated;
+
+grant select on public.profiles to authenticated;
+grant update on public.profiles to authenticated;
+
+grant select on public.reservations to authenticated;
+grant insert on public.reservations to authenticated;
+
+grant usage, select on all sequences in schema public to anon, authenticated;
