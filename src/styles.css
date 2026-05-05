@@ -690,12 +690,27 @@ textarea:focus {
 .my-reservations article {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.48);
+}
+
+.my-reservations article > div {
+  display: grid;
+  gap: 4px;
+}
+
+.my-reservations button {
+  min-height: 38px;
+  padding: 0 14px;
+  border-color: rgba(142, 60, 42, 0.28);
+  color: #8e3c2a;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: none;
 }
 
 .my-reservations span,

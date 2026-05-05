@@ -12,6 +12,7 @@ create table if not exists public.reservations (
   user_name text not null,
   reserve_date date not null,
   reserve_time time not null,
+  phone text not null default '',
   people text not null,
   pet text not null,
   status text not null default 'pending'
@@ -48,6 +49,23 @@ begin
   on conflict (id) do nothing;
 
   return new;
+end;
+$$;
+
+create or replace function public.cancel_own_reservation(reservation_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.reservations
+  set status = 'cancelled'
+  where id = reservation_id
+    and user_id = auth.uid()
+    and status in ('pending', 'confirmed');
+
+  return found;
 end;
 $$;
 
@@ -139,5 +157,8 @@ grant insert on public.reservations to authenticated;
 
 revoke all on function public.is_email_registered(text) from public;
 grant execute on function public.is_email_registered(text) to anon, authenticated;
+
+revoke all on function public.cancel_own_reservation(uuid) from public;
+grant execute on function public.cancel_own_reservation(uuid) to authenticated;
 
 grant usage, select on all sequences in schema public to anon, authenticated;

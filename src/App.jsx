@@ -252,6 +252,7 @@ function App() {
   const [reservation, setReservation] = useState({
     date: '',
     time: '',
+    phone: '',
     people: '2',
     pet: 'dog',
   });
@@ -312,7 +313,7 @@ function App() {
 
     const { data, error } = await supabase
       .from('reservations')
-      .select('id, reserve_date, reserve_time, people, pet, status, created_at')
+      .select('id, reserve_date, reserve_time, phone, people, pet, status, created_at')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -513,6 +514,13 @@ function App() {
       return;
     }
 
+    const phone = reservation.phone.trim();
+
+    if (!phone) {
+      setReservationMessage('請留下聯絡電話，方便店內確認座位。');
+      return;
+    }
+
     if (isSupabaseConfigured) {
       if (!authUser) {
         setReservationMessage('請先使用右上角會員登入，再進行預約。');
@@ -524,6 +532,7 @@ function App() {
         user_name: displayName,
         reserve_date: reservation.date,
         reserve_time: reservation.time,
+        phone,
         people: reservation.people,
         pet: reservation.pet,
       });
@@ -534,14 +543,38 @@ function App() {
       }
 
       setReservationMessage('預約成功，已存入會員預約紀錄。');
-      setReservation((current) => ({ ...current, date: '', time: '' }));
+      setReservation((current) => ({ ...current, date: '', time: '', phone: '' }));
       loadReservations();
       return;
     }
 
     setReservationMessage(
-      `${displayName}，已收到 ${reservation.date} ${reservation.time}，${reservation.people} 位，${petLabels[reservation.pet]} 的預約需求。`,
+      `${displayName}，已收到 ${reservation.date} ${reservation.time}，電話 ${phone}，${reservation.people} 位，${petLabels[reservation.pet]} 的預約需求。`,
     );
+  };
+
+  const handleCancelReservation = async (reservationId) => {
+    if (!isSupabaseConfigured || !authUser) {
+      setReservationMessage('請先登入會員，再取消預約。');
+      return;
+    }
+
+    const { data, error } = await supabase.rpc('cancel_own_reservation', {
+      reservation_id: reservationId,
+    });
+
+    if (error) {
+      setReservationMessage(`取消預約失敗：${error.message}`);
+      return;
+    }
+
+    if (!data) {
+      setReservationMessage('找不到可取消的預約，或此預約已取消。');
+      return;
+    }
+
+    setReservationMessage('已取消預約。');
+    loadReservations();
   };
 
   const goToPhoto = (direction) => {
@@ -877,6 +910,18 @@ function App() {
                 />
               </label>
             </div>
+            <label>
+              聯絡電話
+              <input
+                type="tel"
+                inputMode="tel"
+                value={reservation.phone}
+                onChange={(event) =>
+                  setReservation((current) => ({ ...current, phone: event.target.value }))
+                }
+                placeholder="例如：0912-345-678"
+              />
+            </label>
             <div className="field-row">
               <label>
                 人數
@@ -919,12 +964,20 @@ function App() {
               ) : (
                 myReservations.map((item) => (
                   <article key={item.id}>
-                    <strong>
-                      {item.reserve_date} {item.reserve_time}
-                    </strong>
-                    <span>
-                      {item.people} 位 / {petLabels[item.pet] ?? item.pet} / {item.status}
-                    </span>
+                    <div>
+                      <strong>
+                        {item.reserve_date} {item.reserve_time}
+                      </strong>
+                      <span>
+                        {item.people} 位 / {petLabels[item.pet] ?? item.pet} / 電話 {item.phone || '未填'} /{' '}
+                        {item.status === 'cancelled' ? '已取消' : item.status}
+                      </span>
+                    </div>
+                    {item.status !== 'cancelled' && (
+                      <button type="button" onClick={() => handleCancelReservation(item.id)}>
+                        取消預約
+                      </button>
+                    )}
                   </article>
                 ))
               )}
