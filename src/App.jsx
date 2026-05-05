@@ -234,6 +234,14 @@ const getSignInErrorMessage = (error) => {
   return `登入失敗：${error?.message ?? '請稍後再試。'}`;
 };
 
+const getAuthRedirectTo = () => {
+  if (window.location.hostname.endsWith('github.io')) {
+    return 'https://xiaoxiang1998.github.io/pet-cafe-home/';
+  }
+
+  return `${window.location.origin}/`;
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [authUser, setAuthUser] = useState(null);
@@ -412,7 +420,7 @@ function App() {
       return;
     }
 
-    const redirectTo = window.location.href.split('#')[0];
+    const redirectTo = getAuthRedirectTo();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },
@@ -456,6 +464,7 @@ function App() {
         email,
         password,
         options: {
+          emailRedirectTo: getAuthRedirectTo(),
           data: {
             name: nickname || email.split('@')[0],
           },
@@ -494,6 +503,35 @@ function App() {
 
     setAuthMessage('');
     setAccountOpen(false);
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!isSupabaseConfigured) {
+      setAuthMessage('尚未設定 Supabase，無法重寄驗證信。');
+      return;
+    }
+
+    const email = emailAuth.email.trim();
+
+    if (!email) {
+      setAuthMessage('請先輸入 Email，再重寄驗證信。');
+      return;
+    }
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: getAuthRedirectTo(),
+      },
+    });
+
+    if (error) {
+      setAuthMessage(`重寄驗證信失敗：${error.message}`);
+      return;
+    }
+
+    setAuthMessage('已重寄驗證信，請到信箱點擊確認連結。');
   };
 
   const handleSignOut = async () => {
@@ -733,6 +771,15 @@ function App() {
                         )}
                         <button type="submit">{authMode === 'signup' ? '建立帳號' : '登入'}</button>
                       </form>
+                      {authMode === 'signup' && (
+                        <button
+                          type="button"
+                          className="resend-confirmation-button"
+                          onClick={handleResendConfirmation}
+                        >
+                          重寄驗證信
+                        </button>
+                      )}
                       <div className="social-login">
                         <span>或使用 Google</span>
                         <button type="button" className="google-icon-button" aria-label="使用 Google 登入" onClick={handleGoogleLogin}>

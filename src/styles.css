@@ -287,6 +287,14 @@ main {
   height: 28px;
 }
 
+.account-panel .resend-confirmation-button {
+  min-height: 40px;
+  padding: 0 16px;
+  color: var(--espresso);
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: none;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
