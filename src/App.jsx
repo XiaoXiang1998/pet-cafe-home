@@ -651,7 +651,7 @@ function App() {
                       </form>
                       <div className="social-login">
                         <span>或使用 Google</span>
-                        <button type="button" aria-label="使用 Google 登入" onClick={handleGoogleLogin}>
+                        <button type="button" className="google-icon-button" aria-label="使用 Google 登入" onClick={handleGoogleLogin}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path
                               fill="#4285f4"
