@@ -652,7 +652,7 @@ function App() {
       }
 
       setFeedbackForm((current) => ({ ...current, message: '' }));
-      setFeedbackMessage('回饋已送出並存入資料庫。');
+      setFeedbackMessage('');
       loadFeedbacks();
       return;
     }
@@ -668,7 +668,7 @@ function App() {
       ...current,
     ]);
     setFeedbackForm((current) => ({ ...current, message: '' }));
-    setFeedbackMessage('回饋已送出。');
+    setFeedbackMessage('');
   };
 
   return (
