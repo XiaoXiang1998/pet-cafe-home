@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 const menuItems = [
   {
@@ -207,6 +208,9 @@ const heroScenes = [
 
 function App() {
   const [user, setUser] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [authMessage, setAuthMessage] = useState('');
   const [loginName, setLoginName] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
@@ -218,6 +222,7 @@ function App() {
     pet: 'dog',
   });
   const [reservationMessage, setReservationMessage] = useState('');
+  const [myReservations, setMyReservations] = useState([]);
   const [language, setLanguage] = useState('zh');
   const [feedbackForm, setFeedbackForm] = useState({
     type: 'review',
@@ -244,6 +249,70 @@ function App() {
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
   const activeHeroScene = heroScenes[heroSceneIndex];
   const activePhoto = gallery[galleryIndex];
+  const displayName =
+    profile?.nickname || authUser?.user_metadata?.name || authUser?.email || user?.name || '匿名訪客';
+  const isLoggedIn = Boolean(authUser || user);
+
+  const loadProfile = async (currentUser) => {
+    if (!isSupabaseConfigured || !currentUser) {
+      setProfile(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, nickname')
+      .eq('id', currentUser.id)
+      .maybeSingle();
+
+    if (error) {
+      setAuthMessage(`讀取會員資料失敗：${error.message}`);
+      return;
+    }
+
+    setProfile(data);
+  };
+
+  const loadReservations = async () => {
+    if (!isSupabaseConfigured || !authUser) return;
+
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('id, reserve_date, reserve_time, people, pet, status, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setReservationMessage(`讀取預約失敗：${error.message}`);
+      return;
+    }
+
+    setMyReservations(data ?? []);
+  };
+
+  const loadFeedbacks = async () => {
+    if (!isSupabaseConfigured) return;
+
+    const { data, error } = await supabase
+      .from('feedbacks')
+      .select('id, type, rating, user_name, message, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      setAuthMessage(`讀取評論失敗：${error.message}`);
+      return;
+    }
+
+    setFeedbackEntries(
+      (data ?? []).map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        rating: entry.rating,
+        name: entry.user_name,
+        message: entry.message,
+      })),
+    );
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -252,6 +321,46 @@ function App() {
 
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return undefined;
+
+    let ignore = false;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (ignore) return;
+      const currentUser = data.session?.user ?? null;
+      setAuthUser(currentUser);
+      loadProfile(currentUser);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user ?? null;
+      setAuthUser(currentUser);
+      loadProfile(currentUser);
+      if (!currentUser) {
+        setProfile(null);
+        setMyReservations([]);
+      }
+    });
+
+    return () => {
+      ignore = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    loadFeedbacks();
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !authUser) return;
+    loadReservations();
+  }, [authUser]);
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -262,15 +371,67 @@ function App() {
     setAccountOpen(false);
   };
 
-  const handleReservation = (event) => {
+  const handleGoogleLogin = async () => {
+    if (!isSupabaseConfigured) {
+      setAuthMessage('尚未設定 Supabase URL / anon key，先使用暫時登入模式。');
+      return;
+    }
+
+    const redirectTo = window.location.href.split('#')[0];
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+
+    if (error) setAuthMessage(`Google 登入失敗：${error.message}`);
+  };
+
+  const handleSignOut = async () => {
+    if (isSupabaseConfigured && authUser) {
+      await supabase.auth.signOut();
+    }
+
+    setUser(null);
+    setAuthUser(null);
+    setProfile(null);
+    setAccountOpen(false);
+  };
+
+  const handleReservation = async (event) => {
     event.preventDefault();
     if (!reservation.date || !reservation.time) {
       setReservationMessage('請先選擇訂位日期與時間。');
       return;
     }
 
+    if (isSupabaseConfigured) {
+      if (!authUser) {
+        setReservationMessage('請先使用右上角會員登入，再進行預約。');
+        return;
+      }
+
+      const { error } = await supabase.from('reservations').insert({
+        user_id: authUser.id,
+        user_name: displayName,
+        reserve_date: reservation.date,
+        reserve_time: reservation.time,
+        people: reservation.people,
+        pet: reservation.pet,
+      });
+
+      if (error) {
+        setReservationMessage(`預約失敗：${error.message}`);
+        return;
+      }
+
+      setReservationMessage('預約成功，已存入會員預約紀錄。');
+      setReservation((current) => ({ ...current, date: '', time: '' }));
+      loadReservations();
+      return;
+    }
+
     setReservationMessage(
-      `${user?.name ?? '訪客'}，已收到 ${reservation.date} ${reservation.time}，${reservation.people} 位，${petLabels[reservation.pet]} 的預約需求。`,
+      `${displayName}，已收到 ${reservation.date} ${reservation.time}，${reservation.people} 位，${petLabels[reservation.pet]} 的預約需求。`,
     );
   };
 
@@ -282,17 +443,42 @@ function App() {
     });
   };
 
-  const handleFeedbackSubmit = (event) => {
+  const handleFeedbackSubmit = async (event) => {
     event.preventDefault();
     const trimmedMessage = feedbackForm.message.trim();
     if (!trimmedMessage) return;
+
+    if (isSupabaseConfigured) {
+      if (!authUser) {
+        setAuthMessage('請先使用右上角會員登入，再送出評論或客訴。');
+        return;
+      }
+
+      const { error } = await supabase.from('feedbacks').insert({
+        user_id: authUser.id,
+        user_name: displayName,
+        type: feedbackForm.type,
+        rating: feedbackForm.rating,
+        message: trimmedMessage,
+      });
+
+      if (error) {
+        setAuthMessage(`送出回饋失敗：${error.message}`);
+        return;
+      }
+
+      setFeedbackForm((current) => ({ ...current, message: '' }));
+      setAuthMessage('回饋已送出並存入資料庫。');
+      loadFeedbacks();
+      return;
+    }
 
     setFeedbackEntries((current) => [
       {
         id: Date.now(),
         type: feedbackForm.type,
         rating: feedbackForm.rating,
-        name: user?.name || '匿名訪客',
+        name: displayName,
         message: trimmedMessage,
       },
       ...current,
@@ -328,34 +514,42 @@ function App() {
             <span className="account-icon" aria-hidden="true">
               <span />
             </span>
-            <strong>{user ? user.name : '登入'}</strong>
+            <strong>{isLoggedIn ? displayName : '登入'}</strong>
           </button>
           {accountOpen && (
             <div className="account-panel">
-              {user ? (
+              {isLoggedIn ? (
                 <>
                   <p>
                     目前登入：
-                    <strong>{user.name}</strong>
+                    <strong>{displayName}</strong>
                   </p>
-                  <button type="button" onClick={() => setUser(null)}>
+                  <button type="button" onClick={handleSignOut}>
                     登出
                   </button>
                 </>
               ) : (
-                <form onSubmit={handleLogin}>
+                <>
                   <p className="panel-title">登入選項</p>
-                  <label htmlFor="loginName">暱稱</label>
-                  <input
-                    id="loginName"
-                    value={loginName}
-                    onChange={(event) => setLoginName(event.target.value)}
-                    placeholder="例如：小翔"
-                  />
-                  <button type="submit">暫時登入</button>
-                  <small>之後可在這裡串接會員資料庫。</small>
-                </form>
+                  <button type="button" onClick={handleGoogleLogin}>
+                    使用 Google 登入
+                  </button>
+                  {!isSupabaseConfigured && (
+                    <form onSubmit={handleLogin}>
+                      <label htmlFor="loginName">暱稱</label>
+                      <input
+                        id="loginName"
+                        value={loginName}
+                        onChange={(event) => setLoginName(event.target.value)}
+                        placeholder="例如：小翔"
+                      />
+                      <button type="submit">暫時登入</button>
+                      <small>尚未設定 Supabase 時，暫時登入只存在目前瀏覽器頁面。</small>
+                    </form>
+                  )}
+                </>
               )}
+              {authMessage && <small className="auth-message">{authMessage}</small>}
             </div>
           )}
         </div>
@@ -526,6 +720,25 @@ function App() {
             <button type="submit">送出預約</button>
           </form>
           {reservationMessage && <p className="reservation-message">{reservationMessage}</p>}
+          {isSupabaseConfigured && authUser && (
+            <div className="my-reservations">
+              <h3>我的預約</h3>
+              {myReservations.length === 0 ? (
+                <p>目前沒有預約紀錄。</p>
+              ) : (
+                myReservations.map((item) => (
+                  <article key={item.id}>
+                    <strong>
+                      {item.reserve_date} {item.reserve_time}
+                    </strong>
+                    <span>
+                      {item.people} 位 / {petLabels[item.pet] ?? item.pet} / {item.status}
+                    </span>
+                  </article>
+                ))
+              )}
+            </div>
+          )}
         </article>
       </section>
 
@@ -590,7 +803,7 @@ function App() {
 
               <p className="feedback-author">
                 顯示名稱：
-                <strong>{user?.name || '匿名訪客'}</strong>
+                <strong>{displayName}</strong>
               </p>
 
               <label>

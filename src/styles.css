@@ -207,6 +207,11 @@ main {
   backdrop-filter: blur(18px);
 }
 
+.account-panel {
+  display: grid;
+  gap: 14px;
+}
+
 .account-panel form,
 .account-panel p {
   margin: 0;
@@ -220,6 +225,13 @@ main {
 .panel-title {
   color: var(--terracotta);
   font-weight: 900;
+}
+
+.auth-message {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(185, 95, 59, 0.1);
 }
 
 .hero {
@@ -608,6 +620,34 @@ textarea:focus {
   border-radius: 20px;
   color: var(--espresso);
   background: rgba(225, 187, 131, 0.44);
+}
+
+.my-reservations {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.my-reservations h3 {
+  margin-bottom: 4px;
+}
+
+.my-reservations article {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.my-reservations span,
+.my-reservations p {
+  color: var(--muted);
 }
 
 .language-switcher {
