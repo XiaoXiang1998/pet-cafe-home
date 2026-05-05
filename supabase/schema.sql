@@ -98,6 +98,7 @@ drop policy if exists "Users can create own reservations" on public.reservations
 drop policy if exists "Users can read own reservations" on public.reservations;
 drop policy if exists "Users can create own feedback" on public.feedbacks;
 drop policy if exists "Anyone can read reviews" on public.feedbacks;
+drop policy if exists "Anyone can read feedback" on public.feedbacks;
 drop policy if exists "Users can read own complaints" on public.feedbacks;
 
 create policy "Users can read own profile"
@@ -131,17 +132,11 @@ for insert
 to authenticated
 with check (auth.uid() = user_id);
 
-create policy "Anyone can read reviews"
+create policy "Anyone can read feedback"
 on public.feedbacks
 for select
 to anon, authenticated
-using (type = 'review');
-
-create policy "Users can read own complaints"
-on public.feedbacks
-for select
-to authenticated
-using (type = 'complaint' and auth.uid() = user_id);
+using (true);
 
 grant usage on schema public to anon, authenticated;
 
