@@ -206,6 +206,34 @@ const heroScenes = [
   },
 ];
 
+const isDuplicateSignupError = (error) => {
+  const message = `${error?.code ?? ''} ${error?.message ?? ''}`.toLowerCase();
+  return (
+    message.includes('already registered') ||
+    message.includes('already exists') ||
+    message.includes('user already') ||
+    message.includes('email_exists')
+  );
+};
+
+const getSignInErrorMessage = (error) => {
+  const message = `${error?.code ?? ''} ${error?.message ?? ''}`.toLowerCase();
+
+  if (
+    message.includes('invalid_credentials') ||
+    message.includes('invalid login credentials') ||
+    message.includes('invalid email or password')
+  ) {
+    return '登入失敗：無相關帳號資訊或密碼錯誤。';
+  }
+
+  if (message.includes('email_not_confirmed') || message.includes('email not confirmed')) {
+    return '登入失敗：請先到信箱完成 Email 驗證。';
+  }
+
+  return `登入失敗：${error?.message ?? '請稍後再試。'}`;
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [authUser, setAuthUser] = useState(null);
@@ -409,6 +437,20 @@ function App() {
     }
 
     if (authMode === 'signup') {
+      const { data: emailExists, error: emailLookupError } = await supabase.rpc('is_email_registered', {
+        check_email: email,
+      });
+
+      if (emailLookupError) {
+        setAuthMessage('目前無法檢查帳號是否重複，請稍後再試。');
+        return;
+      }
+
+      if (emailExists) {
+        setAuthMessage('此 Email 已被註冊，請直接登入或換一個 Email。');
+        return;
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -420,7 +462,16 @@ function App() {
       });
 
       if (error) {
-        setAuthMessage(`註冊失敗：${error.message}`);
+        setAuthMessage(
+          isDuplicateSignupError(error)
+            ? '此 Email 已被註冊，請直接登入或換一個 Email。'
+            : `註冊失敗：${error.message}`,
+        );
+        return;
+      }
+
+      if (data.user?.identities && data.user.identities.length === 0) {
+        setAuthMessage('此 Email 已被註冊，請直接登入或換一個 Email。');
         return;
       }
 
@@ -436,7 +487,7 @@ function App() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setAuthMessage(`登入失敗：${error.message}`);
+      setAuthMessage(getSignInErrorMessage(error));
       return;
     }
 

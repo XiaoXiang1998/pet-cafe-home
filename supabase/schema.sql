@@ -57,6 +57,19 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
 
+create or replace function public.is_email_registered(check_email text)
+returns boolean
+language sql
+security definer
+set search_path = auth, public
+as $$
+  select exists (
+    select 1
+    from auth.users
+    where lower(email) = lower(trim(check_email))
+  );
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.reservations enable row level security;
 alter table public.feedbacks enable row level security;
@@ -123,5 +136,8 @@ grant update on public.profiles to authenticated;
 
 grant select on public.reservations to authenticated;
 grant insert on public.reservations to authenticated;
+
+revoke all on function public.is_email_registered(text) from public;
+grant execute on function public.is_email_registered(text) to anon, authenticated;
 
 grant usage, select on all sequences in schema public to anon, authenticated;
