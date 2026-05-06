@@ -2,6 +2,33 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 const FEEDBACK_PAGE_SIZE = 5;
+const FEEDBACK_FILTERS = [
+  { value: 'all', label: '全部' },
+  { value: 'review', label: '評論' },
+  { value: 'complaint', label: '客訴' },
+];
+const FEEDBACK_STATUSES = ['new', 'reviewing', 'resolved', 'hidden'];
+const RESERVATION_STATUSES = ['pending', 'confirmed', 'cancelled', 'completed'];
+const ADMIN_TABS = [
+  { value: 'reservations', label: '預約' },
+  { value: 'feedbacks', label: '評論/客訴' },
+  { value: 'members', label: '會員' },
+  { value: 'menu', label: '菜單' },
+];
+
+const createEmptyMenuForm = () => ({
+  id: '',
+  zhName: '',
+  zhDescription: '',
+  enName: '',
+  enDescription: '',
+  jaName: '',
+  jaDescription: '',
+  price: '',
+  image: '',
+  sortOrder: '0',
+  isActive: true,
+});
 
 const menuItems = [
   {
@@ -244,6 +271,56 @@ const getAuthRedirectTo = () => {
   return `${window.location.origin}/`;
 };
 
+const normalizeMenuLabels = (labels = {}) => ({
+  zh: {
+    name: labels.zh?.name || labels.en?.name || '未命名品項',
+    description: labels.zh?.description || labels.en?.description || '',
+  },
+  en: {
+    name: labels.en?.name || labels.zh?.name || 'Untitled item',
+    description: labels.en?.description || labels.zh?.description || '',
+  },
+  ja: {
+    name: labels.ja?.name || labels.zh?.name || labels.en?.name || '未命名品項',
+    description: labels.ja?.description || labels.zh?.description || labels.en?.description || '',
+  },
+});
+
+const mapMenuRow = (item) => ({
+  id: item.id,
+  price: item.price,
+  image: item.image,
+  labels: normalizeMenuLabels(item.labels),
+  isActive: item.is_active ?? true,
+  sortOrder: item.sort_order ?? 0,
+});
+
+const menuFormFromItem = (item) => ({
+  id: item.id,
+  zhName: item.labels.zh.name,
+  zhDescription: item.labels.zh.description,
+  enName: item.labels.en.name,
+  enDescription: item.labels.en.description,
+  jaName: item.labels.ja.name,
+  jaDescription: item.labels.ja.description,
+  price: String(item.price ?? ''),
+  image: item.image ?? '',
+  sortOrder: String(item.sortOrder ?? 0),
+  isActive: item.isActive ?? true,
+});
+
+const menuPayloadFromForm = (form) => ({
+  labels: normalizeMenuLabels({
+    zh: { name: form.zhName.trim(), description: form.zhDescription.trim() },
+    en: { name: form.enName.trim(), description: form.enDescription.trim() },
+    ja: { name: form.jaName.trim(), description: form.jaDescription.trim() },
+  }),
+  price: Number(form.price) || 0,
+  image: form.image.trim(),
+  sort_order: Number(form.sortOrder) || 0,
+  is_active: form.isActive,
+});
+
 function App() {
   const [user, setUser] = useState(null);
   const [authUser, setAuthUser] = useState(null);
@@ -255,6 +332,9 @@ function App() {
     password: '',
     nickname: '',
   });
+  const [profileForm, setProfileForm] = useState({ nickname: '' });
+  const [profileMessage, setProfileMessage] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [loginName, setLoginName] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
@@ -275,6 +355,7 @@ function App() {
     message: '',
   });
   const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackFilter, setFeedbackFilter] = useState('all');
   const [feedbackPage, setFeedbackPage] = useState(1);
   const [feedbackEntries, setFeedbackEntries] = useState([
     {
@@ -292,6 +373,14 @@ function App() {
       message: '尖峰時段等候稍久，希望預約提醒可以再清楚一點。',
     },
   ]);
+  const [menuEntries, setMenuEntries] = useState(menuItems);
+  const [adminTab, setAdminTab] = useState('reservations');
+  const [adminMessage, setAdminMessage] = useState('');
+  const [adminReservations, setAdminReservations] = useState([]);
+  const [adminFeedbacks, setAdminFeedbacks] = useState([]);
+  const [adminProfiles, setAdminProfiles] = useState([]);
+  const [adminMenuItems, setAdminMenuItems] = useState([]);
+  const [adminMenuForm, setAdminMenuForm] = useState(createEmptyMenuForm);
 
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
   const activeHeroScene = heroScenes[heroSceneIndex];
@@ -299,10 +388,17 @@ function App() {
   const displayName =
     profile?.nickname || authUser?.user_metadata?.name || authUser?.email || user?.name || '匿名訪客';
   const isLoggedIn = Boolean(authUser || user);
-  const feedbackPageCount = Math.max(1, Math.ceil(feedbackEntries.length / FEEDBACK_PAGE_SIZE));
+  const isAdmin = profile?.role === 'admin';
+  const filteredFeedbackEntries = feedbackEntries.filter(
+    (entry) => feedbackFilter === 'all' || entry.type === feedbackFilter,
+  );
+  const feedbackPageCount = Math.max(
+    1,
+    Math.ceil(filteredFeedbackEntries.length / FEEDBACK_PAGE_SIZE),
+  );
   const currentFeedbackPage = Math.min(feedbackPage, feedbackPageCount);
   const feedbackStartIndex = (currentFeedbackPage - 1) * FEEDBACK_PAGE_SIZE;
-  const paginatedFeedbackEntries = feedbackEntries.slice(
+  const paginatedFeedbackEntries = filteredFeedbackEntries.slice(
     feedbackStartIndex,
     feedbackStartIndex + FEEDBACK_PAGE_SIZE,
   );
@@ -313,11 +409,22 @@ function App() {
       return;
     }
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('profiles')
-      .select('id, email, nickname')
+      .select('id, email, nickname, role, created_at')
       .eq('id', currentUser.id)
       .maybeSingle();
+
+    if (error && error.message?.includes('role')) {
+      const fallback = await supabase
+        .from('profiles')
+        .select('id, email, nickname')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      data = fallback.data ? { ...fallback.data, role: 'user' } : fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       setAuthMessage(`讀取會員資料失敗：${error.message}`);
@@ -325,6 +432,7 @@ function App() {
     }
 
     setProfile(data);
+    setProfileForm({ nickname: data?.nickname ?? '' });
   };
 
   const loadReservations = async () => {
@@ -346,11 +454,23 @@ function App() {
   const loadFeedbacks = async () => {
     if (!isSupabaseConfigured) return;
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('feedbacks')
-      .select('id, type, rating, user_name, message, created_at')
+      .select('id, type, rating, user_name, message, status, is_visible, created_at')
+      .eq('is_visible', true)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
+
+    if (error && error.message?.includes('is_visible')) {
+      const fallback = await supabase
+        .from('feedbacks')
+        .select('id, type, rating, user_name, message, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       setFeedbackMessage(`讀取評論失敗：${error.message}`);
@@ -364,8 +484,60 @@ function App() {
         rating: entry.rating,
         name: entry.user_name,
         message: entry.message,
+        status: entry.status ?? 'new',
+        isVisible: entry.is_visible ?? true,
       })),
     );
+  };
+
+  const loadMenuItems = async () => {
+    if (!isSupabaseConfigured) return;
+
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select('id, labels, price, image, is_active, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+
+    if (!error && data?.length) {
+      setMenuEntries(data.map(mapMenuRow));
+    }
+  };
+
+  const loadAdminDashboard = async () => {
+    if (!isSupabaseConfigured || !isAdmin) return;
+
+    const [reservationResult, feedbackResult, profileResult, menuResult] = await Promise.all([
+      supabase
+        .from('reservations')
+        .select('id, user_name, reserve_date, reserve_time, phone, people, pet, status, created_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('feedbacks')
+        .select('id, type, rating, user_name, message, status, is_visible, created_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('profiles')
+        .select('id, email, nickname, role, created_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('menu_items')
+        .select('id, labels, price, image, is_active, sort_order, created_at, updated_at')
+        .order('sort_order', { ascending: true }),
+    ]);
+
+    const firstError =
+      reservationResult.error || feedbackResult.error || profileResult.error || menuResult.error;
+
+    if (firstError) {
+      setAdminMessage(`後台資料讀取失敗：${firstError.message}`);
+      return;
+    }
+
+    setAdminReservations(reservationResult.data ?? []);
+    setAdminFeedbacks(feedbackResult.data ?? []);
+    setAdminProfiles(profileResult.data ?? []);
+    setAdminMenuItems((menuResult.data ?? []).map(mapMenuRow));
   };
 
   useEffect(() => {
@@ -390,12 +562,17 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null;
       setAuthUser(currentUser);
       loadProfile(currentUser);
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthMode('update-password');
+        setAccountOpen(true);
+      }
       if (!currentUser) {
         setProfile(null);
+        setProfileForm({ nickname: '' });
         setMyReservations([]);
       }
     });
@@ -409,6 +586,7 @@ function App() {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     loadFeedbacks();
+    loadMenuItems();
   }, []);
 
   useEffect(() => {
@@ -419,6 +597,135 @@ function App() {
   useEffect(() => {
     setFeedbackPage((current) => (current > feedbackPageCount ? feedbackPageCount : current));
   }, [feedbackPageCount]);
+
+  useEffect(() => {
+    setFeedbackPage(1);
+  }, [feedbackFilter]);
+
+  useEffect(() => {
+    if (isAdmin) loadAdminDashboard();
+  }, [isAdmin]);
+
+  const handleProfileUpdate = async (event) => {
+    event.preventDefault();
+    if (!isSupabaseConfigured || !authUser) return;
+
+    const nickname = profileForm.nickname.trim();
+    if (!nickname) {
+      setProfileMessage('請輸入暱稱。');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ nickname })
+      .eq('id', authUser.id);
+
+    if (error) {
+      setProfileMessage(`更新失敗：${error.message}`);
+      return;
+    }
+
+    setProfileMessage('會員資料已更新。');
+    loadProfile(authUser);
+  };
+
+  const handlePasswordResetRequest = async () => {
+    if (!isSupabaseConfigured) return;
+
+    const email = emailAuth.email.trim();
+    if (!email) {
+      setAuthMessage('請先輸入 Email，再寄送重設密碼信。');
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getAuthRedirectTo(),
+    });
+
+    setAuthMessage(error ? `重設密碼信寄送失敗：${error.message}` : '已寄出重設密碼信，請查看信箱。');
+  };
+
+  const handlePasswordUpdate = async (event) => {
+    event.preventDefault();
+    if (!isSupabaseConfigured) return;
+
+    if (newPassword.length < 6) {
+      setAuthMessage('新密碼至少需要 6 個字元。');
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      setAuthMessage(`密碼更新失敗：${error.message}`);
+      return;
+    }
+
+    setNewPassword('');
+    setAuthMode('signin');
+    setAuthMessage('密碼已更新，之後可使用新密碼登入。');
+  };
+
+  const updateReservationStatus = async (reservationId, status) => {
+    if (!isSupabaseConfigured || !isAdmin) return;
+
+    const { error } = await supabase
+      .from('reservations')
+      .update({ status })
+      .eq('id', reservationId);
+
+    if (error) {
+      setAdminMessage(`預約狀態更新失敗：${error.message}`);
+      return;
+    }
+
+    setAdminMessage('預約狀態已更新。');
+    loadAdminDashboard();
+    loadReservations();
+  };
+
+  const updateFeedbackAdminFields = async (feedbackId, values) => {
+    if (!isSupabaseConfigured || !isAdmin) return;
+
+    const { error } = await supabase.from('feedbacks').update(values).eq('id', feedbackId);
+
+    if (error) {
+      setAdminMessage(`回饋更新失敗：${error.message}`);
+      return;
+    }
+
+    setAdminMessage('回饋狀態已更新。');
+    loadAdminDashboard();
+    loadFeedbacks();
+  };
+
+  const handleAdminMenuSubmit = async (event) => {
+    event.preventDefault();
+    if (!isSupabaseConfigured || !isAdmin) return;
+
+    const payload = menuPayloadFromForm(adminMenuForm);
+    if (!adminMenuForm.zhName.trim() && !adminMenuForm.enName.trim()) {
+      setAdminMessage('請至少輸入中文或英文品項名稱。');
+      return;
+    }
+
+    const request = adminMenuForm.id
+      ? supabase.from('menu_items').update(payload).eq('id', adminMenuForm.id)
+      : supabase.from('menu_items').insert(payload);
+
+    const { error } = await request;
+
+    if (error) {
+      setAdminMessage(`菜單儲存失敗：${error.message}`);
+      return;
+    }
+
+    setAdminMenuForm(createEmptyMenuForm());
+    setAdminMessage('菜單品項已儲存。');
+    loadMenuItems();
+    loadAdminDashboard();
+  };
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -454,6 +761,11 @@ function App() {
     const email = emailAuth.email.trim();
     const password = emailAuth.password;
     const nickname = emailAuth.nickname.trim();
+
+    if (authMode === 'update-password') {
+      handlePasswordUpdate(event);
+      return;
+    }
 
     if (!email || !password) {
       setAuthMessage('請輸入 Email 和密碼。');
@@ -703,6 +1015,8 @@ function App() {
           <a href="#reserve">預約</a>
           <a href="#menu">菜單</a>
           <a href="#feedback">評論</a>
+          {isLoggedIn && <a href="#member">會員中心</a>}
+          {isAdmin && <a href="#admin">後台</a>}
         </div>
         <div className="account-menu">
           <button
@@ -728,6 +1042,14 @@ function App() {
                   <button type="button" onClick={handleSignOut}>
                     登出
                   </button>
+                  <a className="panel-link" href="#member" onClick={() => setAccountOpen(false)}>
+                    會員中心
+                  </a>
+                  {isAdmin && (
+                    <a className="panel-link" href="#admin" onClick={() => setAccountOpen(false)}>
+                      後台管理
+                    </a>
+                  )}
                 </>
               ) : (
                 <>
@@ -792,6 +1114,15 @@ function App() {
                         )}
                         <button type="submit">{authMode === 'signup' ? '建立帳號' : '登入'}</button>
                       </form>
+                      {authMode === 'signin' && (
+                        <button
+                          type="button"
+                          className="resend-confirmation-button"
+                          onClick={handlePasswordResetRequest}
+                        >
+                          忘記密碼
+                        </button>
+                      )}
                       {authMode === 'signup' && (
                         <button
                           type="button"
@@ -1054,6 +1385,74 @@ function App() {
         </article>
       </section>
 
+      {isLoggedIn && (
+        <section className="member-section" id="member">
+          <div className="section-heading">
+            <div>
+              <p className="section-kicker">Member Center</p>
+              <h2>會員中心</h2>
+            </div>
+          </div>
+          <div className="member-layout">
+            <article className="member-card">
+              <h3>個人資料</h3>
+              <form onSubmit={handleProfileUpdate}>
+                <label>
+                  暱稱
+                  <input
+                    value={profileForm.nickname}
+                    onChange={(event) =>
+                      setProfileForm((current) => ({ ...current, nickname: event.target.value }))
+                    }
+                    placeholder="輸入想顯示的暱稱"
+                  />
+                </label>
+                <label>
+                  Email
+                  <input value={authUser?.email ?? ''} disabled />
+                </label>
+                <button type="submit">更新會員資料</button>
+              </form>
+              {profileMessage && <p className="reservation-message">{profileMessage}</p>}
+            </article>
+
+            <article className="member-card">
+              <h3>帳號安全</h3>
+              <form onSubmit={handlePasswordUpdate}>
+                <label>
+                  新密碼
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    placeholder="至少 6 個字元"
+                  />
+                </label>
+                <button type="submit">更新密碼</button>
+              </form>
+            </article>
+
+            <article className="member-card member-reservations">
+              <h3>我的預約紀錄</h3>
+              {myReservations.length === 0 ? (
+                <p>目前沒有預約紀錄。</p>
+              ) : (
+                myReservations.map((item) => (
+                  <article key={item.id}>
+                    <strong>
+                      {item.reserve_date} {item.reserve_time}
+                    </strong>
+                    <span>
+                      {item.people} 位 / {petLabels[item.pet] ?? item.pet} / {item.status}
+                    </span>
+                  </article>
+                ))
+              )}
+            </article>
+          </div>
+        </section>
+      )}
+
       <section className="menu-section" id="menu">
         <div className="section-heading">
           <p className="section-kicker">Menu</p>
@@ -1072,7 +1471,7 @@ function App() {
           </div>
         </div>
         <div className="menu-grid">
-          {menuItems.map((item) => (
+          {menuEntries.map((item) => (
             <article className="menu-card" key={item.id}>
               <img src={item.image} alt={item.labels[language].name} />
               <div>
@@ -1092,6 +1491,18 @@ function App() {
           <div>
             <p className="section-kicker">Reviews & Complaints</p>
             <h2>客訴與評論</h2>
+          </div>
+          <div className="feedback-filter" aria-label="回饋篩選">
+            {FEEDBACK_FILTERS.map((filter) => (
+              <button
+                className={feedbackFilter === filter.value ? 'active' : ''}
+                key={filter.value}
+                type="button"
+                onClick={() => setFeedbackFilter(filter.value)}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1206,6 +1617,266 @@ function App() {
           </div>
         </div>
       </section>
+
+      {isAdmin && (
+        <section className="admin-section" id="admin">
+          <div className="section-heading">
+            <div>
+              <p className="section-kicker">Admin Console</p>
+              <h2>後台管理</h2>
+            </div>
+            <div className="admin-tabs" role="tablist" aria-label="後台分頁">
+              {ADMIN_TABS.map((tab) => (
+                <button
+                  className={adminTab === tab.value ? 'active' : ''}
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setAdminTab(tab.value)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {adminMessage && <p className="admin-message">{adminMessage}</p>}
+
+          {adminTab === 'reservations' && (
+            <div className="admin-grid">
+              {adminReservations.map((item) => (
+                <article className="admin-card" key={item.id}>
+                  <div>
+                    <span className="tag">{item.status}</span>
+                    <h3>{item.user_name}</h3>
+                    <p>
+                      {item.reserve_date} {item.reserve_time} / {item.people} 位 /{' '}
+                      {petLabels[item.pet] ?? item.pet}
+                    </p>
+                    <p>電話：{item.phone || '未提供'}</p>
+                  </div>
+                  <select
+                    value={item.status}
+                    onChange={(event) => updateReservationStatus(item.id, event.target.value)}
+                  >
+                    {RESERVATION_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {adminTab === 'feedbacks' && (
+            <div className="admin-grid">
+              {adminFeedbacks.map((entry) => (
+                <article className="admin-card" key={entry.id}>
+                  <div>
+                    <span className={entry.type === 'complaint' ? 'tag complaint' : 'tag'}>
+                      {entry.type === 'complaint' ? '客訴' : '評論'}
+                    </span>
+                    <h3>{entry.user_name}</h3>
+                    <p>{entry.message}</p>
+                  </div>
+                  <div className="admin-controls">
+                    <label>
+                      狀態
+                      <select
+                        value={entry.status ?? 'new'}
+                        onChange={(event) =>
+                          updateFeedbackAdminFields(entry.id, { status: event.target.value })
+                        }
+                      >
+                        {FEEDBACK_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="checkbox-row">
+                      <input
+                        checked={entry.is_visible ?? true}
+                        type="checkbox"
+                        onChange={(event) =>
+                          updateFeedbackAdminFields(entry.id, {
+                            is_visible: event.target.checked,
+                          })
+                        }
+                      />
+                      前台顯示
+                    </label>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {adminTab === 'members' && (
+            <div className="admin-grid">
+              {adminProfiles.map((member) => (
+                <article className="admin-card" key={member.id}>
+                  <span className="tag">{member.role}</span>
+                  <h3>{member.nickname || '未命名會員'}</h3>
+                  <p>{member.email}</p>
+                  <p>建立時間：{member.created_at ? new Date(member.created_at).toLocaleString() : '-'}</p>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {adminTab === 'menu' && (
+            <div className="admin-menu-layout">
+              <article className="admin-card">
+                <h3>{adminMenuForm.id ? '編輯菜單品項' : '新增菜單品項'}</h3>
+                <form onSubmit={handleAdminMenuSubmit}>
+                  <div className="field-row">
+                    <label>
+                      中文名稱
+                      <input
+                        value={adminMenuForm.zhName}
+                        onChange={(event) =>
+                          setAdminMenuForm((current) => ({ ...current, zhName: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      英文名稱
+                      <input
+                        value={adminMenuForm.enName}
+                        onChange={(event) =>
+                          setAdminMenuForm((current) => ({ ...current, enName: event.target.value }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    中文描述
+                    <textarea
+                      value={adminMenuForm.zhDescription}
+                      onChange={(event) =>
+                        setAdminMenuForm((current) => ({
+                          ...current,
+                          zhDescription: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    英文描述
+                    <textarea
+                      value={adminMenuForm.enDescription}
+                      onChange={(event) =>
+                        setAdminMenuForm((current) => ({
+                          ...current,
+                          enDescription: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    日文名稱
+                    <input
+                      value={adminMenuForm.jaName}
+                      onChange={(event) =>
+                        setAdminMenuForm((current) => ({ ...current, jaName: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    日文描述
+                    <textarea
+                      value={adminMenuForm.jaDescription}
+                      onChange={(event) =>
+                        setAdminMenuForm((current) => ({
+                          ...current,
+                          jaDescription: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <div className="field-row">
+                    <label>
+                      價格
+                      <input
+                        min="0"
+                        type="number"
+                        value={adminMenuForm.price}
+                        onChange={(event) =>
+                          setAdminMenuForm((current) => ({ ...current, price: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      排序
+                      <input
+                        type="number"
+                        value={adminMenuForm.sortOrder}
+                        onChange={(event) =>
+                          setAdminMenuForm((current) => ({
+                            ...current,
+                            sortOrder: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    圖片 URL
+                    <input
+                      value={adminMenuForm.image}
+                      onChange={(event) =>
+                        setAdminMenuForm((current) => ({ ...current, image: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="checkbox-row">
+                    <input
+                      checked={adminMenuForm.isActive}
+                      type="checkbox"
+                      onChange={(event) =>
+                        setAdminMenuForm((current) => ({
+                          ...current,
+                          isActive: event.target.checked,
+                        }))
+                      }
+                    />
+                    前台上架
+                  </label>
+                  <div className="admin-form-actions">
+                    <button type="submit">{adminMenuForm.id ? '更新品項' : '新增品項'}</button>
+                    {adminMenuForm.id && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminMenuForm(createEmptyMenuForm())}
+                      >
+                        取消編輯
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </article>
+
+              <div className="admin-grid">
+                {adminMenuItems.map((item) => (
+                  <article className="admin-card" key={item.id}>
+                    <span className={item.isActive ? 'tag' : 'tag complaint'}>
+                      {item.isActive ? '上架' : '隱藏'}
+                    </span>
+                    <h3>{item.labels.zh.name}</h3>
+                    <p>NT$ {item.price} / 排序 {item.sortOrder}</p>
+                    <button type="button" onClick={() => setAdminMenuForm(menuFormFromItem(item))}>
+                      編輯
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <footer>
         <strong>小翔動物友善餐廳</strong>

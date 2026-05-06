@@ -222,6 +222,20 @@ main {
   line-height: 1.6;
 }
 
+.panel-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--espresso);
+  background: rgba(255, 247, 234, 0.72);
+  font-weight: 900;
+  text-decoration: none;
+}
+
 .panel-title {
   color: var(--terracotta);
   font-weight: 900;
@@ -477,7 +491,9 @@ form button {
 .gallery-section,
 .forms-section,
 .menu-section,
-.feedback-section {
+.feedback-section,
+.member-section,
+.admin-section {
   margin: 96px 0;
 }
 
@@ -655,6 +671,11 @@ textarea {
   outline: none;
 }
 
+input[type='checkbox'] {
+  width: auto;
+  min-height: 0;
+}
+
 textarea {
   min-height: 132px;
   padding: 14px;
@@ -673,6 +694,12 @@ textarea:focus {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .reservation-message {
@@ -726,10 +753,105 @@ textarea:focus {
   color: var(--muted);
 }
 
+.member-layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.member-card,
+.admin-card {
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  background: rgba(255, 247, 234, 0.8);
+  box-shadow: var(--shadow);
+}
+
+.member-card,
+.admin-card {
+  padding: 24px;
+}
+
+.member-card p,
+.member-card span,
+.admin-card p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.member-reservations {
+  display: grid;
+  gap: 12px;
+}
+
+.member-reservations article {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
 .language-switcher {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.admin-tabs,
+.feedback-filter,
+.admin-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-tabs button,
+.feedback-filter button,
+.admin-form-actions button {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  color: var(--espresso);
+  background: rgba(255, 247, 234, 0.7);
+}
+
+.admin-tabs button.active,
+.feedback-filter button.active {
+  color: #fff7ea;
+  background: var(--terracotta);
+}
+
+.admin-message {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  color: var(--espresso);
+  background: rgba(225, 187, 131, 0.44);
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-card {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-controls {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-menu-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+  align-items: start;
 }
 
 .language-switcher button {
@@ -1010,7 +1132,10 @@ footer strong {
   .hero,
   .intro-panel,
   .menu-grid,
-  .feedback-layout {
+  .feedback-layout,
+  .member-layout,
+  .admin-grid,
+  .admin-menu-layout {
     grid-template-columns: 1fr;
   }
 
