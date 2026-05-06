@@ -1112,11 +1112,6 @@ function App() {
                 </select>
               </label>
 
-              <p className="feedback-author">
-                顯示名稱：
-                <strong>{displayName}</strong>
-              </p>
-
               <label>
                 評分
                 <div className="rating-stars" role="radiogroup" aria-label="評分星等">
@@ -1166,7 +1161,6 @@ function App() {
                     {'★'.repeat(entry.rating)}
                   </div>
                 </div>
-                <h3>{entry.name}</h3>
                 <p>{entry.message}</p>
               </article>
             ))}
