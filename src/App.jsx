@@ -335,6 +335,7 @@ function App() {
   const [profileForm, setProfileForm] = useState({ nickname: '' });
   const [profileMessage, setProfileMessage] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [loginName, setLoginName] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
@@ -387,8 +388,8 @@ function App() {
   const activePhoto = gallery[galleryIndex];
   const displayName =
     profile?.nickname || authUser?.user_metadata?.name || authUser?.email || user?.name || '匿名訪客';
-  const isLoggedIn = Boolean(authUser || user);
-  const isAdmin = profile?.role === 'admin';
+  const isLoggedIn = Boolean(authUser || user) && !isPasswordRecovery;
+  const isAdmin = profile?.role === 'admin' && !isPasswordRecovery;
   const filteredFeedbackEntries = feedbackEntries.filter(
     (entry) => feedbackFilter === 'all' || entry.type === feedbackFilter,
   );
@@ -567,10 +568,12 @@ function App() {
       setAuthUser(currentUser);
       loadProfile(currentUser);
       if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
         setAuthMode('update-password');
         setAccountOpen(true);
       }
       if (!currentUser) {
+        setIsPasswordRecovery(false);
         setProfile(null);
         setProfileForm({ nickname: '' });
         setMyReservations([]);
@@ -663,6 +666,7 @@ function App() {
     }
 
     setNewPassword('');
+    setIsPasswordRecovery(false);
     setProfileMessage('密碼已變更完成，請重新登入。');
     setAuthMessage('密碼已變更完成，請重新登入。');
     window.setTimeout(async () => {
@@ -870,6 +874,7 @@ function App() {
       await supabase.auth.signOut();
     }
 
+    setIsPasswordRecovery(false);
     setUser(null);
     setAuthUser(null);
     setProfile(null);
@@ -1033,11 +1038,27 @@ function App() {
             <span className="account-icon" aria-hidden="true">
               <span />
             </span>
-            <strong>{isLoggedIn ? displayName : '登入'}</strong>
+            <strong>{isPasswordRecovery ? '設定新密碼' : isLoggedIn ? displayName : '登入'}</strong>
           </button>
           {accountOpen && (
             <div className="account-panel">
-              {isLoggedIn ? (
+              {isPasswordRecovery ? (
+                <>
+                  <p className="panel-title">設定新密碼</p>
+                  <form onSubmit={handlePasswordUpdate}>
+                    <label htmlFor="recoveryPassword">新密碼</label>
+                    <input
+                      id="recoveryPassword"
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="至少 6 個字元"
+                    />
+                    <button type="submit">變更密碼</button>
+                  </form>
+                  <small>密碼變更完成後，系統會登出並要求你重新登入。</small>
+                </>
+              ) : isLoggedIn ? (
                 <>
                   <p>
                     目前登入：
