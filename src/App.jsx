@@ -671,7 +671,7 @@ function App() {
     setPasswordMessage('密碼已變更完成，請重新登入。');
     window.setTimeout(async () => {
       await supabase.auth.signOut();
-      window.location.reload();
+      window.location.assign(`${window.location.origin}${window.location.pathname}`);
     }, 1200);
   };
 
@@ -1381,33 +1381,6 @@ function App() {
             <button type="submit">送出預約</button>
           </form>
           {reservationMessage && <p className="reservation-message">{reservationMessage}</p>}
-          {isSupabaseConfigured && authUser && (
-            <div className="my-reservations">
-              <h3>我的預約</h3>
-              {myReservations.length === 0 ? (
-                <p>目前沒有預約紀錄。</p>
-              ) : (
-                myReservations.map((item) => (
-                  <article key={item.id}>
-                    <div>
-                      <strong>
-                        {item.reserve_date} {item.reserve_time}
-                      </strong>
-                      <span>
-                        {item.people} 位 / {petLabels[item.pet] ?? item.pet} / 電話 {item.phone || '未填'} /{' '}
-                        {item.status === 'cancelled' ? '已取消' : item.status}
-                      </span>
-                    </div>
-                    {item.status !== 'cancelled' && (
-                      <button type="button" onClick={() => handleCancelReservation(item.id)}>
-                        取消預約
-                      </button>
-                    )}
-                  </article>
-                ))
-              )}
-            </div>
-          )}
         </article>
       </section>
 
