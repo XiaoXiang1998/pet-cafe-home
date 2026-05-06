@@ -663,8 +663,12 @@ function App() {
     }
 
     setNewPassword('');
-    setAuthMode('signin');
-    setAuthMessage('密碼已更新，之後可使用新密碼登入。');
+    setProfileMessage('密碼已變更完成，請重新登入。');
+    setAuthMessage('密碼已變更完成，請重新登入。');
+    window.setTimeout(async () => {
+      await supabase.auth.signOut();
+      window.location.reload();
+    }, 1200);
   };
 
   const updateReservationStatus = async (reservationId, status) => {
