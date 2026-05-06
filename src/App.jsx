@@ -1161,6 +1161,7 @@ function App() {
                     {'★'.repeat(entry.rating)}
                   </div>
                 </div>
+                <h3>{entry.name}</h3>
                 <p>{entry.message}</p>
               </article>
             ))}
