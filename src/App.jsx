@@ -271,6 +271,26 @@ const getAuthRedirectTo = () => {
   return `${window.location.origin}/`;
 };
 
+const getRouteFromPath = () => {
+  const path = window.location.pathname.replace(/\/+$/, '');
+
+  if (path.endsWith('/member')) return 'member';
+  if (path.endsWith('/admin')) return 'admin';
+
+  return 'home';
+};
+
+const getBasePath = () =>
+  window.location.pathname.startsWith('/pet-cafe-home') ? '/pet-cafe-home/' : '/';
+
+const getRoutePath = (route) => {
+  const basePath = getBasePath();
+
+  if (route === 'home') return basePath;
+
+  return `${basePath}${route}`;
+};
+
 const normalizeMenuLabels = (labels = {}) => ({
   zh: {
     name: labels.zh?.name || labels.en?.name || '未命名品項',
@@ -339,6 +359,7 @@ function App() {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [loginName, setLoginName] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
+  const [route, setRoute] = useState(getRouteFromPath);
   const [heroSceneIndex, setHeroSceneIndex] = useState(0);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [reservation, setReservation] = useState({
@@ -395,6 +416,9 @@ function App() {
     authUser.app_metadata?.provider === 'email' ||
     authUser.identities?.some((identity) => identity.provider === 'email');
   const isAdmin = profile?.role === 'admin' && !isPasswordRecovery;
+  const isHomeRoute = route === 'home';
+  const isMemberRoute = route === 'member';
+  const isAdminRoute = route === 'admin';
   const filteredFeedbackEntries = feedbackEntries.filter(
     (entry) => feedbackFilter === 'all' || entry.type === feedbackFilter,
   );
@@ -555,6 +579,16 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const handlePopState = () => {
+      setRoute(getRouteFromPath());
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
     if (!isSupabaseConfigured) return undefined;
 
     let ignore = false;
@@ -613,6 +647,18 @@ function App() {
   useEffect(() => {
     if (isAdmin) loadAdminDashboard();
   }, [isAdmin]);
+
+  const navigateTo = (nextRoute) => {
+    window.history.pushState({}, '', getRoutePath(nextRoute));
+    setRoute(nextRoute);
+    setAccountOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRouteClick = (event, nextRoute) => {
+    event.preventDefault();
+    navigateTo(nextRoute);
+  };
 
   const handleProfileUpdate = async (event) => {
     event.preventDefault();
@@ -675,7 +721,7 @@ function App() {
     setPasswordMessage('密碼已變更完成，請重新登入。');
     window.setTimeout(async () => {
       await supabase.auth.signOut();
-      window.location.assign(`${window.location.origin}${window.location.pathname}`);
+      window.location.assign(`${window.location.origin}${getRoutePath('home')}`);
     }, 1200);
   };
 
@@ -1015,7 +1061,12 @@ function App() {
   return (
     <main>
       <nav className="topbar" aria-label="主導覽">
-        <a className="brand" href="#home" aria-label="回到首頁">
+        <a
+          className="brand"
+          href={getRoutePath('home')}
+          aria-label="回到首頁"
+          onClick={(event) => handleRouteClick(event, 'home')}
+        >
           <span className="brand-mark">翔</span>
           <span>
             小翔動物友善餐廳
@@ -1023,13 +1074,21 @@ function App() {
           </span>
         </a>
         <div className="nav-links">
-          <a href="#intro">介紹</a>
-          <a href="#gallery">環景與合照</a>
-          <a href="#reserve">預約</a>
-          <a href="#menu">菜單</a>
-          <a href="#feedback">評論</a>
-          {isLoggedIn && <a href="#member">會員中心</a>}
-          {isAdmin && <a href="#admin">後台</a>}
+          <a href={`${getRoutePath('home')}#intro`}>介紹</a>
+          <a href={`${getRoutePath('home')}#gallery`}>環景與合照</a>
+          <a href={`${getRoutePath('home')}#reserve`}>預約</a>
+          <a href={`${getRoutePath('home')}#menu`}>菜單</a>
+          <a href={`${getRoutePath('home')}#feedback`}>評論</a>
+          {isLoggedIn && (
+            <a href={getRoutePath('member')} onClick={(event) => handleRouteClick(event, 'member')}>
+              會員中心
+            </a>
+          )}
+          {isAdmin && (
+            <a href={getRoutePath('admin')} onClick={(event) => handleRouteClick(event, 'admin')}>
+              後台
+            </a>
+          )}
         </div>
         <div className="account-menu">
           <button
@@ -1072,11 +1131,19 @@ function App() {
                   <button type="button" onClick={handleSignOut}>
                     登出
                   </button>
-                  <a className="panel-link" href="#member" onClick={() => setAccountOpen(false)}>
+                  <a
+                    className="panel-link"
+                    href={getRoutePath('member')}
+                    onClick={(event) => handleRouteClick(event, 'member')}
+                  >
                     會員中心
                   </a>
                   {isAdmin && (
-                    <a className="panel-link" href="#admin" onClick={() => setAccountOpen(false)}>
+                    <a
+                      className="panel-link"
+                      href={getRoutePath('admin')}
+                      onClick={(event) => handleRouteClick(event, 'admin')}
+                    >
                       後台管理
                     </a>
                   )}
@@ -1208,6 +1275,8 @@ function App() {
         </div>
       </nav>
 
+      {isHomeRoute && (
+        <>
       <section className="hero" id="home">
         <div className="hero-copy">
           <p className="eyebrow">Taipei pet friendly cafe</p>
@@ -1388,7 +1457,10 @@ function App() {
         </article>
       </section>
 
-      {isLoggedIn && (
+        </>
+      )}
+
+      {isMemberRoute && isLoggedIn && (
         <section className="member-section" id="member">
           <div className="section-heading">
             <div>
@@ -1460,6 +1532,8 @@ function App() {
         </section>
       )}
 
+      {isHomeRoute && (
+        <>
       <section className="menu-section" id="menu">
         <div className="section-heading">
           <p className="section-kicker">Menu</p>
@@ -1625,7 +1699,10 @@ function App() {
         </div>
       </section>
 
-      {isAdmin && (
+        </>
+      )}
+
+      {isAdminRoute && isAdmin && (
         <section className="admin-section" id="admin">
           <div className="section-heading">
             <div>
@@ -1882,6 +1959,24 @@ function App() {
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {isMemberRoute && !isLoggedIn && (
+        <section className="member-section">
+          <article className="member-card">
+            <h2>請先登入會員</h2>
+            <p>登入後即可查看會員中心與預約紀錄。</p>
+          </article>
+        </section>
+      )}
+
+      {isAdminRoute && !isAdmin && (
+        <section className="admin-section">
+          <article className="admin-card">
+            <h2>需要管理員權限</h2>
+            <p>請使用管理員帳號登入後再進入後台。</p>
+          </article>
         </section>
       )}
 
