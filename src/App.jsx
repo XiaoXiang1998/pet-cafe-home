@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
+const FEEDBACK_PAGE_SIZE = 5;
+
 const menuItems = [
   {
     id: 'salmon-brunch',
@@ -273,6 +275,7 @@ function App() {
     message: '',
   });
   const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackPage, setFeedbackPage] = useState(1);
   const [feedbackEntries, setFeedbackEntries] = useState([
     {
       id: 1,
@@ -296,6 +299,13 @@ function App() {
   const displayName =
     profile?.nickname || authUser?.user_metadata?.name || authUser?.email || user?.name || '匿名訪客';
   const isLoggedIn = Boolean(authUser || user);
+  const feedbackPageCount = Math.max(1, Math.ceil(feedbackEntries.length / FEEDBACK_PAGE_SIZE));
+  const currentFeedbackPage = Math.min(feedbackPage, feedbackPageCount);
+  const feedbackStartIndex = (currentFeedbackPage - 1) * FEEDBACK_PAGE_SIZE;
+  const paginatedFeedbackEntries = feedbackEntries.slice(
+    feedbackStartIndex,
+    feedbackStartIndex + FEEDBACK_PAGE_SIZE,
+  );
 
   const loadProfile = async (currentUser) => {
     if (!isSupabaseConfigured || !currentUser) {
@@ -405,6 +415,10 @@ function App() {
     if (!isSupabaseConfigured || !authUser) return;
     loadReservations();
   }, [authUser]);
+
+  useEffect(() => {
+    setFeedbackPage((current) => (current > feedbackPageCount ? feedbackPageCount : current));
+  }, [feedbackPageCount]);
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -653,6 +667,7 @@ function App() {
 
       setFeedbackForm((current) => ({ ...current, message: '' }));
       setFeedbackMessage('');
+      setFeedbackPage(1);
       loadFeedbacks();
       return;
     }
@@ -667,6 +682,7 @@ function App() {
       },
       ...current,
     ]);
+    setFeedbackPage(1);
     setFeedbackForm((current) => ({ ...current, message: '' }));
     setFeedbackMessage('');
   };
@@ -1140,7 +1156,7 @@ function App() {
           </article>
 
           <div className="feedback-list" aria-label="評論與客訴列表">
-            {feedbackEntries.map((entry) => (
+            {paginatedFeedbackEntries.map((entry) => (
               <article className="feedback-item" key={entry.id}>
                 <div className="feedback-item-head">
                   <span className={entry.type === 'complaint' ? 'tag complaint' : 'tag'}>
@@ -1154,6 +1170,44 @@ function App() {
                 <p>{entry.message}</p>
               </article>
             ))}
+            {feedbackPageCount > 1 && (
+              <nav className="feedback-pagination" aria-label="評論分頁">
+                <button
+                  type="button"
+                  onClick={() => setFeedbackPage((current) => Math.max(1, current - 1))}
+                  disabled={currentFeedbackPage === 1}
+                >
+                  上一頁
+                </button>
+                <div className="feedback-page-numbers">
+                  {Array.from({ length: feedbackPageCount }, (_, index) => {
+                    const page = index + 1;
+
+                    return (
+                      <button
+                        className={page === currentFeedbackPage ? 'active' : ''}
+                        key={page}
+                        type="button"
+                        aria-label={`第 ${page} 頁`}
+                        aria-current={page === currentFeedbackPage ? 'page' : undefined}
+                        onClick={() => setFeedbackPage(page)}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFeedbackPage((current) => Math.min(feedbackPageCount, current + 1))
+                  }
+                  disabled={currentFeedbackPage === feedbackPageCount}
+                >
+                  下一頁
+                </button>
+              </nav>
+            )}
           </div>
         </div>
       </section>

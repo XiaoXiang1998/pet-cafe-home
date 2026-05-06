@@ -854,6 +854,40 @@ textarea:focus {
   gap: 16px;
 }
 
+.feedback-pagination,
+.feedback-page-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.feedback-pagination {
+  margin-top: 6px;
+}
+
+.feedback-pagination button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--espresso);
+  background: rgba(255, 247, 234, 0.82);
+  box-shadow: 0 12px 24px rgba(61, 42, 29, 0.1);
+}
+
+.feedback-pagination button.active {
+  color: #fff7ea;
+  background: var(--espresso);
+}
+
+.feedback-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
 .feedback-item {
   padding: 22px;
 }
