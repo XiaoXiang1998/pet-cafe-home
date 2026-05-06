@@ -335,6 +335,7 @@ function App() {
   const [profileForm, setProfileForm] = useState({ nickname: '' });
   const [profileMessage, setProfileMessage] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState('');
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [loginName, setLoginName] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
@@ -654,21 +655,20 @@ function App() {
     if (!isSupabaseConfigured) return;
 
     if (newPassword.length < 6) {
-      setAuthMessage('新密碼至少需要 6 個字元。');
+      setPasswordMessage('新密碼至少需要 6 個字元。');
       return;
     }
 
     const { error } = await supabase.auth.updateUser({ password: newPassword });
 
     if (error) {
-      setAuthMessage(`密碼更新失敗：${error.message}`);
+      setPasswordMessage(`密碼更新失敗：${error.message}`);
       return;
     }
 
     setNewPassword('');
     setIsPasswordRecovery(false);
-    setProfileMessage('密碼已變更完成，請重新登入。');
-    setAuthMessage('密碼已變更完成，請重新登入。');
+    setPasswordMessage('密碼已變更完成，請重新登入。');
     window.setTimeout(async () => {
       await supabase.auth.signOut();
       window.location.reload();
@@ -1057,6 +1057,7 @@ function App() {
                     <button type="submit">變更密碼</button>
                   </form>
                   <small>密碼變更完成後，系統會登出並要求你重新登入。</small>
+                  {passwordMessage && <small className="auth-message">{passwordMessage}</small>}
                 </>
               ) : isLoggedIn ? (
                 <>
@@ -1455,6 +1456,8 @@ function App() {
                 </label>
                 <button type="submit">更新密碼</button>
               </form>
+              <small>密碼變更完成後，系統會登出並要求你重新登入。</small>
+              {passwordMessage && <p className="reservation-message">{passwordMessage}</p>}
             </article>
 
             <article className="member-card member-reservations">
