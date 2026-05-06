@@ -390,6 +390,10 @@ function App() {
   const displayName =
     profile?.nickname || authUser?.user_metadata?.name || authUser?.email || user?.name || '匿名訪客';
   const isLoggedIn = Boolean(authUser || user) && !isPasswordRecovery;
+  const hasPasswordIdentity =
+    !authUser ||
+    authUser.app_metadata?.provider === 'email' ||
+    authUser.identities?.some((identity) => identity.provider === 'email');
   const isAdmin = profile?.role === 'admin' && !isPasswordRecovery;
   const filteredFeedbackEntries = feedbackEntries.filter(
     (entry) => feedbackFilter === 'all' || entry.type === feedbackFilter,
@@ -1415,23 +1419,25 @@ function App() {
               {profileMessage && <p className="reservation-message">{profileMessage}</p>}
             </article>
 
-            <article className="member-card">
-              <h3>帳號安全</h3>
-              <form onSubmit={handlePasswordUpdate}>
-                <label>
-                  新密碼
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    placeholder="至少 6 個字元"
-                  />
-                </label>
-                <button type="submit">更新密碼</button>
-              </form>
-              <small>密碼變更完成後，系統會登出並要求你重新登入。</small>
-              {passwordMessage && <p className="reservation-message">{passwordMessage}</p>}
-            </article>
+            {hasPasswordIdentity && (
+              <article className="member-card">
+                <h3>帳號安全</h3>
+                <form onSubmit={handlePasswordUpdate}>
+                  <label>
+                    新密碼
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="至少 6 個字元"
+                    />
+                  </label>
+                  <button type="submit">更新密碼</button>
+                </form>
+                <small>密碼變更完成後，系統會登出並要求你重新登入。</small>
+                {passwordMessage && <p className="reservation-message">{passwordMessage}</p>}
+              </article>
+            )}
 
             <article className="member-card member-reservations">
               <h3>我的預約紀錄</h3>
