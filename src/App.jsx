@@ -263,12 +263,16 @@ const getSignInErrorMessage = (error) => {
   return `登入失敗：${error?.message ?? '請稍後再試。'}`;
 };
 
+const PRIMARY_SITE_URL = 'https://pet-cafe-home.netlify.app';
+
 const getAuthRedirectTo = () => {
-  if (window.location.hostname.endsWith('github.io')) {
-    return 'https://xiaoxiang1998.github.io/pet-cafe-home/';
+  const { hostname, origin } = window.location;
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `${origin}/`;
   }
 
-  return `${window.location.origin}/`;
+  return `${PRIMARY_SITE_URL}/`;
 };
 
 const getRouteFromPath = () => {
