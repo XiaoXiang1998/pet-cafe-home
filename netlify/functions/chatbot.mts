@@ -12,9 +12,10 @@ const jsonResponse = (body, status = 200) =>
 const getEnv = (key) => {
   const netlifyGlobal = globalThis as typeof globalThis & {
     Netlify?: { env?: { get?: (name: string) => string | undefined } };
+    process?: { env?: Record<string, string | undefined> };
   };
 
-  return netlifyGlobal.Netlify?.env?.get?.(key) || '';
+  return netlifyGlobal.Netlify?.env?.get?.(key) || netlifyGlobal.process?.env?.[key] || '';
 };
 
 const getTaipeiDate = (date = new Date()) =>
@@ -218,7 +219,7 @@ export default async (req) => {
     : '這次沒有查詢特定日期的預約時段。';
   const openAiKey = getEnv('OPENAI_API_KEY');
 
-  if (!openAiKey) {
+  if (!openAiKey || !openAiKey.startsWith('sk-')) {
     return jsonResponse({
       reply: buildFreeFallbackReply(
         latestUserMessage.content,
