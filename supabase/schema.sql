@@ -129,7 +129,7 @@ as $$
   with slots as (
     select generate_series(
       timestamp '2000-01-01 10:00',
-      timestamp '2000-01-01 21:00',
+      timestamp '2000-01-01 22:00',
       interval '30 minutes'
     )::time as slot_time
   ),

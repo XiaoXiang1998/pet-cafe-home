@@ -1464,7 +1464,7 @@ function App() {
                 <input
                   type="time"
                   min="10:00"
-                  max="21:00"
+                  max="22:00"
                   value={reservation.time}
                   onChange={(event) =>
                     setReservation((current) => ({ ...current, time: event.target.value }))
@@ -2100,7 +2100,7 @@ function App() {
 
       <footer>
         <strong>小翔動物友善餐廳</strong>
-        <span>營業時間 10:00 - 21:00 / 歡迎貓貓狗狗同行</span>
+        <span>營業時間 10:00 - 22:00 / 歡迎貓貓狗狗同行</span>
       </footer>
     </main>
   );

@@ -1,6 +1,6 @@
 const DEFAULT_MODEL = 'gpt-5-nano';
 const CAFE_ADDRESS = '地址尚未設定，請聯繫店家確認。';
-const BUSINESS_HOURS = '10:00 - 21:00';
+const BUSINESS_HOURS = '10:00 - 22:00';
 const TIME_ZONE = 'Asia/Taipei';
 
 const jsonResponse = (body, status = 200) =>
@@ -145,7 +145,6 @@ const buildAvailabilityReply = (dateText, availabilityResult) => {
   }
 
   const timeText = availableRows
-    .slice(0, 12)
     .map((row) => `${formatSlotTime(row.slot_time)}（剩 ${Number(row.remaining_count)} 組）`)
     .join('、');
 
