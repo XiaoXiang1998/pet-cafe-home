@@ -115,6 +115,46 @@ begin
 end;
 $$;
 
+create or replace function public.get_reservation_availability(check_date date)
+returns table (
+  slot_time time,
+  booked_count int,
+  remaining_count int,
+  is_available boolean
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with slots as (
+    select generate_series(
+      timestamp '2000-01-01 10:00',
+      timestamp '2000-01-01 21:00',
+      interval '30 minutes'
+    )::time as slot_time
+  ),
+  booked as (
+    select
+      reserve_time as slot_time,
+      count(*)::int as booked_count
+    from public.reservations
+    where reserve_date = check_date
+      and status in ('pending', 'confirmed')
+    group by reserve_time
+  )
+  select
+    slots.slot_time,
+    coalesce(booked.booked_count, 0)::int as booked_count,
+    greatest(6 - coalesce(booked.booked_count, 0), 0)::int as remaining_count,
+    (
+      check_date >= ((now() at time zone 'Asia/Taipei')::date)
+      and coalesce(booked.booked_count, 0) < 6
+    ) as is_available
+  from slots
+  left join booked using (slot_time)
+  order by slots.slot_time;
+$$;
+
 drop trigger if exists on_auth_user_created on auth.users;
 
 create trigger on_auth_user_created
@@ -276,5 +316,8 @@ grant execute on function public.is_admin() to authenticated;
 
 revoke all on function public.cancel_own_reservation(uuid) from public;
 grant execute on function public.cancel_own_reservation(uuid) to authenticated;
+
+revoke all on function public.get_reservation_availability(date) from public;
+grant execute on function public.get_reservation_availability(date) to anon, authenticated;
 
 grant usage, select on all sequences in schema public to anon, authenticated;

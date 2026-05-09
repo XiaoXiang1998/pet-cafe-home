@@ -15,6 +15,13 @@ const ADMIN_TABS = [
   { value: 'members', label: '會員' },
   { value: 'menu', label: '菜單' },
 ];
+const CHATBOT_ENDPOINT = import.meta.env.VITE_CHATBOT_ENDPOINT || '/.netlify/functions/chatbot';
+const INITIAL_CHAT_MESSAGES = [
+  {
+    role: 'assistant',
+    text: '你好，我是小翔餐廳小幫手。可以問我可預約時段、餐廳特色、地址或寵物友善資訊。',
+  },
+];
 
 const createEmptyMenuForm = () => ({
   id: '',
@@ -408,6 +415,11 @@ function App() {
   const [adminProfiles, setAdminProfiles] = useState([]);
   const [adminMenuItems, setAdminMenuItems] = useState([]);
   const [adminMenuForm, setAdminMenuForm] = useState(createEmptyMenuForm);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState('');
 
   const minDate = useMemo(() => new Date().toISOString().split('T')[0], []);
   const activeHeroScene = heroScenes[heroSceneIndex];
@@ -1060,6 +1072,54 @@ function App() {
     setFeedbackPage(1);
     setFeedbackForm((current) => ({ ...current, message: '' }));
     setFeedbackMessage('');
+  };
+
+  const handleChatSubmit = async (event) => {
+    event.preventDefault();
+
+    const message = chatInput.trim();
+    if (!message || chatLoading) return;
+
+    const outgoingMessages = [...chatMessages, { role: 'user', text: message }];
+    setChatMessages(outgoingMessages);
+    setChatInput('');
+    setChatError('');
+    setChatLoading(true);
+
+    try {
+      const response = await fetch(CHATBOT_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: outgoingMessages.map((entry) => ({
+            role: entry.role,
+            content: entry.text,
+          })),
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'AI 小幫手暫時無法回覆，請稍後再試。');
+      }
+
+      if (!data.reply) {
+        throw new Error(data.error || 'AI 小幫手暫時無法取得有效回覆，請稍後再試。');
+      }
+
+      setChatMessages((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          text: data.reply,
+        },
+      ]);
+    } catch (error) {
+      setChatError(error.message || 'AI 小幫手暫時無法回覆，請稍後再試。');
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   return (
@@ -1983,6 +2043,60 @@ function App() {
           </article>
         </section>
       )}
+
+      <section className={`chatbot ${chatOpen ? 'open' : ''}`} aria-label="AI 聊天小幫手">
+        {chatOpen && (
+          <article className="chatbot-panel">
+            <header className="chatbot-header">
+              <div>
+                <strong>小翔 AI 小幫手</strong>
+                <span>可查詢預約時段與餐廳資訊</span>
+              </div>
+              <button type="button" aria-label="關閉 AI 聊天小幫手" onClick={() => setChatOpen(false)}>
+                ×
+              </button>
+            </header>
+
+            <div className="chatbot-messages" aria-live="polite">
+              {chatMessages.map((entry, index) => (
+                <div className={`chatbot-message ${entry.role}`} key={`${entry.role}-${index}`}>
+                  {entry.text}
+                </div>
+              ))}
+              {chatLoading && <div className="chatbot-message assistant">正在確認資訊...</div>}
+            </div>
+
+            {chatError && <p className="chatbot-error">{chatError}</p>}
+
+            <form className="chatbot-form" onSubmit={handleChatSubmit}>
+              <label className="sr-only" htmlFor="chatbot-input">
+                輸入想詢問小翔 AI 小幫手的問題
+              </label>
+              <input
+                id="chatbot-input"
+                type="text"
+                value={chatInput}
+                placeholder="例：5/14 還有哪些時間可以預約？"
+                disabled={chatLoading}
+                onChange={(event) => setChatInput(event.target.value)}
+              />
+              <button type="submit" disabled={chatLoading || !chatInput.trim()}>
+                送出
+              </button>
+            </form>
+          </article>
+        )}
+
+        <button
+          className="chatbot-toggle"
+          type="button"
+          aria-expanded={chatOpen}
+          aria-label="開啟 AI 聊天小幫手"
+          onClick={() => setChatOpen((current) => !current)}
+        >
+          AI
+        </button>
+      </section>
 
       <footer>
         <strong>小翔動物友善餐廳</strong>
