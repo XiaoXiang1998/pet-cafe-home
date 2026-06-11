@@ -59,13 +59,13 @@
   <text class="text small" x="625" y="336">維護會員資料</text>
 
   <ellipse class="usecase" cx="425" cy="445" rx="115" ry="36"/>
-  <text class="text small" x="365" y="451">建立 / 取消預約</text>
+  <text class="text small" x="365" y="451">建立 / 查看預約</text>
 
   <ellipse class="usecase" cx="690" cy="445" rx="115" ry="36"/>
   <text class="text small" x="626" y="451">送出評價 / 客訴</text>
 
   <ellipse class="admincase" cx="425" cy="585" rx="120" ry="38"/>
-  <text class="text small" x="359" y="591">管理預約狀態</text>
+  <text class="text small" x="349" y="591">管理 / 取消預約</text>
 
   <ellipse class="admincase" cx="690" cy="585" rx="120" ry="38"/>
   <text class="text small" x="624" y="591">管理評價與會員</text>

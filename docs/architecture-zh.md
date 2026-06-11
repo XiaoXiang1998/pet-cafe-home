@@ -34,10 +34,9 @@ flowchart LR
 | 忘記 / 更新密碼 | `handlePasswordResetRequest()`、`handlePasswordUpdate()` | `resetPasswordForEmail()`、`updateUser()` | 使用 Supabase Auth recovery flow |
 | 會員資料 | `loadProfile()`、`handleProfileUpdate()` | `profiles` select / update | 使用者只能讀寫自己的 profile；admin 可讀全部 |
 | 建立預約 | `handleReservation()` | `reservations` insert | 需要登入；RLS 限制 `auth.uid() = user_id` |
-| 查看自己的預約 | `loadReservations()` | `reservations` select | 會員只讀自己的預約 |
-| 取消自己的預約 | `handleCancelReservation()` | RPC `cancel_own_reservation()` | RPC 只允許取消自己的 pending / confirmed 預約 |
+| 查看自己的預約 | `loadReservations()`、`myReservations` | `reservations` select | 會員頁目前只列出自己的預約，沒有提供取消按鈕 |
 | 送出評價 / 客訴 | `handleFeedbackSubmit()` | `feedbacks` insert | 需要登入；公開顯示由 `is_visible` 控制 |
-| 管理預約 | `loadAdminDashboard()`、`updateReservationStatus()` | `reservations` select / update | 只有 `profiles.role = admin` 可操作 |
+| 管理預約 | `loadAdminDashboard()`、`updateReservationStatus()` | `reservations` select / update | 只有 `profiles.role = admin` 可操作；取消預約目前由管理員改狀態完成 |
 | 管理評價 | `updateFeedbackAdminFields()` | `feedbacks` update status / is_visible | 管理員可調整處理狀態與公開狀態 |
 | 管理會員 | `loadAdminDashboard()` | `profiles` select | 管理員讀取會員列表 |
 | 管理菜單 | `handleAdminMenuSubmit()` | `menu_items` insert / update | 管理員新增或更新菜單 |
@@ -64,7 +63,7 @@ flowchart TD
   role -- 否 --> memberData[loadReservations 載入自己的預約]
 
   home --> publicData[loadFeedbacks / loadMenuItems]
-  member --> actions[更新 profile / 建預約 / 取消預約 / 送評價]
+  member --> actions[更新 profile / 建預約 / 查看自己的預約 / 送評價]
   admin --> adminActions[更新預約狀態 / 評價狀態 / 菜單]
 ```
 
@@ -102,20 +101,21 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   actor Member as 會員
+  actor Admin as 管理員
   participant App as React App
   participant DB as Supabase DB
-  participant RPC as Supabase RPC
 
   Member->>App: 填日期、時間、電話、人數、寵物類型
   App->>DB: insert reservations
   DB-->>App: success / error
   App->>DB: loadReservations
   DB-->>App: 會員自己的預約列表
-  Member->>App: 取消預約
-  App->>RPC: cancel_own_reservation(reservation_id)
-  RPC->>DB: update own pending/confirmed to cancelled
-  RPC-->>App: true / false
+  Admin->>App: 在管理後台更新預約狀態
+  App->>DB: update reservations.status
+  DB-->>App: success / error
 ```
+
+目前會員頁會顯示自己的預約清單，但沒有提供取消按鈕。程式中雖然存在 `handleCancelReservation()` 與 RPC `cancel_own_reservation()`，但未在會員預約清單 JSX 中接上操作入口；以目前可操作流程為準，取消預約是管理員在後台修改 `reservations.status`。
 
 可預約時段不是在建立預約時直接檢查，而是在 AI 客服流程中透過 `get_reservation_availability(check_date)` 查詢。該 RPC 以 10:00 到 22:00、每 30 分鐘一格產生 slot，計算 pending / confirmed 的已訂數量，並以每個時段 6 筆作為剩餘名額基準。
 
@@ -158,12 +158,12 @@ sequenceDiagram
 | 資料表 / RPC | 被誰使用 | 前端 / Function 對應 | 權限重點 |
 | --- | --- | --- | --- |
 | `profiles` | 會員、管理員 | `loadProfile()`、`handleProfileUpdate()`、`loadAdminDashboard()` | 會員讀寫自己；admin 讀全部 |
-| `reservations` | 會員、管理員 | `handleReservation()`、`loadReservations()`、`updateReservationStatus()` | 會員新增 / 讀自己；admin 讀寫全部 |
+| `reservations` | 會員、管理員 | `handleReservation()`、`loadReservations()`、`updateReservationStatus()` | 會員新增 / 讀自己；admin 讀寫全部並可改成 cancelled |
 | `feedbacks` | 訪客、會員、管理員 | `loadFeedbacks()`、`handleFeedbackSubmit()`、`updateFeedbackAdminFields()` | 訪客讀公開；會員新增；admin 讀寫 |
 | `menu_items` | 訪客、管理員 | `loadMenuItems()`、`handleAdminMenuSubmit()` | 訪客讀 active；admin 管理 |
 | `is_email_registered()` | 註冊流程 | `handleEmailAuth()` | anon / authenticated 可執行 |
 | `is_admin()` | RLS policy | schema policies | authenticated 可執行 |
-| `cancel_own_reservation()` | 會員取消預約 | `handleCancelReservation()` | authenticated 可執行，但函式內限制本人 |
+| `cancel_own_reservation()` | 尚未接到目前會員 UI | `handleCancelReservation()` | DB 與 handler 存在，但目前會員畫面沒有操作入口 |
 | `get_reservation_availability()` | AI 客服查時段 | `chatbot.mts` | anon / authenticated 可執行 |
 
 ## 八、部署流程
@@ -190,6 +190,7 @@ flowchart LR
 
 1. 中文文案亂碼：目前不影響從程式結構辨識功能，但會影響使用者體驗與維護。建議後續優先修復原始中文字串編碼。
 2. 前端大型單檔：`src/App.jsx` 同時承擔 UI、資料存取與流程控制，後續可拆成 auth、reservation、feedback、admin、chatbot 等 hooks 或 modules。
-3. 預約容量檢查位置：目前 `get_reservation_availability()` 可查剩餘量，但建立預約時未看到同等容量檢查。若正式營運需要避免超額預約，建議加入 DB transaction / RPC 建立預約。
-4. 管理員菜單只支援新增與更新：目前未看到刪除菜單項目的流程；這符合保守資料策略，也可用 `is_active = false` 做下架。
-5. OpenAI key 只在 Function 端使用：這是正確方向，避免把 private key 放到前端 bundle。
+3. 會員取消預約流程未接 UI：`cancel_own_reservation()` 與 `handleCancelReservation()` 存在，但會員預約列表沒有取消按鈕；目前取消由管理員改狀態處理。
+4. 預約容量檢查位置：目前 `get_reservation_availability()` 可查剩餘量，但建立預約時未看到同等容量檢查。若正式營運需要避免超額預約，建議加入 DB transaction / RPC 建立預約。
+5. 管理員菜單只支援新增與更新：目前未看到刪除菜單項目的流程；這符合保守資料策略，也可用 `is_active = false` 做下架。
+6. OpenAI key 只在 Function 端使用：這是正確方向，避免把 private key 放到前端 bundle。
