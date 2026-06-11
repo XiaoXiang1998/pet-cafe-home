@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
+  <title id="title">Pet Cafe Home USE CASE 圖</title>
+  <desc id="desc">寵物咖啡廳網站的使用者、會員、管理員、Supabase、Netlify Function 與 OpenAI 對應關係。</desc>
+  <defs>
+    <style>
+      .bg { fill: #fbfaf7; }
+      .system { fill: #ffffff; stroke: #2f3a3d; stroke-width: 2; }
+      .actor { fill: #f4efe6; stroke: #2f3a3d; stroke-width: 2; }
+      .usecase { fill: #eef7f2; stroke: #2e6f57; stroke-width: 2; }
+      .admincase { fill: #f4f0ff; stroke: #6650a4; stroke-width: 2; }
+      .external { fill: #eef3fb; stroke: #3867a6; stroke-width: 2; }
+      .text { font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif; fill: #1d2527; font-size: 20px; }
+      .small { font-size: 16px; }
+      .title { font-size: 34px; font-weight: 700; }
+      .label { font-size: 18px; font-weight: 700; }
+      .line { stroke: #657174; stroke-width: 2; fill: none; }
+      .dash { stroke-dasharray: 8 8; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1280" height="820"/>
+  <text class="text title" x="48" y="58">Pet Cafe Home USE CASE 圖</text>
+  <text class="text small" x="50" y="88">依目前程式結構整理：React SPA、Supabase、Netlify Function、OpenAI Responses API</text>
+
+  <rect class="system" x="270" y="120" width="660" height="610" rx="18"/>
+  <text class="text label" x="520" y="155">React SPA：src/App.jsx</text>
+
+  <rect class="actor" x="52" y="160" width="150" height="70" rx="12"/>
+  <text class="text label" x="88" y="203">訪客</text>
+
+  <rect class="actor" x="52" y="340" width="150" height="70" rx="12"/>
+  <text class="text label" x="88" y="383">會員</text>
+
+  <rect class="actor" x="52" y="560" width="150" height="70" rx="12"/>
+  <text class="text label" x="78" y="603">管理員</text>
+
+  <rect class="external" x="1010" y="170" width="190" height="80" rx="12"/>
+  <text class="text label" x="1054" y="205">Supabase</text>
+  <text class="text small" x="1030" y="230">Auth / DB / RPC / RLS</text>
+
+  <rect class="external" x="1010" y="370" width="190" height="80" rx="12"/>
+  <text class="text label" x="1030" y="405">Netlify Function</text>
+  <text class="text small" x="1047" y="430">chatbot.mts</text>
+
+  <rect class="external" x="1010" y="555" width="190" height="80" rx="12"/>
+  <text class="text label" x="1059" y="590">OpenAI</text>
+  <text class="text small" x="1028" y="615">Responses API</text>
+
+  <ellipse class="usecase" cx="425" cy="215" rx="115" ry="36"/>
+  <text class="text small" x="363" y="221">瀏覽首頁 / 菜單</text>
+
+  <ellipse class="usecase" cx="690" cy="215" rx="115" ry="36"/>
+  <text class="text small" x="628" y="221">查看公開評價</text>
+
+  <ellipse class="usecase" cx="425" cy="330" rx="115" ry="36"/>
+  <text class="text small" x="360" y="336">註冊 / 登入</text>
+
+  <ellipse class="usecase" cx="690" cy="330" rx="115" ry="36"/>
+  <text class="text small" x="625" y="336">維護會員資料</text>
+
+  <ellipse class="usecase" cx="425" cy="445" rx="115" ry="36"/>
+  <text class="text small" x="365" y="451">建立 / 取消預約</text>
+
+  <ellipse class="usecase" cx="690" cy="445" rx="115" ry="36"/>
+  <text class="text small" x="626" y="451">送出評價 / 客訴</text>
+
+  <ellipse class="admincase" cx="425" cy="585" rx="120" ry="38"/>
+  <text class="text small" x="359" y="591">管理預約狀態</text>
+
+  <ellipse class="admincase" cx="690" cy="585" rx="120" ry="38"/>
+  <text class="text small" x="624" y="591">管理評價與會員</text>
+
+  <ellipse class="admincase" cx="560" cy="680" rx="120" ry="38"/>
+  <text class="text small" x="509" y="686">管理菜單</text>
+
+  <ellipse class="usecase" cx="560" cy="520" rx="125" ry="36"/>
+  <text class="text small" x="503" y="526">AI 客服聊天</text>
+
+  <path class="line" d="M202 195 L310 215"/>
+  <path class="line" d="M202 195 L575 215"/>
+  <path class="line" d="M202 375 L310 330"/>
+  <path class="line" d="M202 375 L575 330"/>
+  <path class="line" d="M202 375 L310 445"/>
+  <path class="line" d="M202 375 L575 445"/>
+  <path class="line" d="M202 595 L305 585"/>
+  <path class="line" d="M202 595 L570 585"/>
+  <path class="line" d="M202 595 L440 680"/>
+  <path class="line" d="M202 375 L435 520"/>
+  <path class="line" d="M202 195 L435 520"/>
+
+  <path class="line" d="M805 215 C890 215 920 210 1010 210"/>
+  <path class="line" d="M540 330 C820 330 850 220 1010 210"/>
+  <path class="line" d="M805 330 C900 330 900 240 1010 210"/>
+  <path class="line" d="M540 445 C800 445 850 250 1010 210"/>
+  <path class="line" d="M805 445 C895 445 910 250 1010 210"/>
+  <path class="line" d="M545 585 C820 585 850 250 1010 210"/>
+  <path class="line" d="M810 585 C910 585 930 260 1010 210"/>
+  <path class="line" d="M680 680 C850 680 925 265 1010 210"/>
+
+  <path class="line" d="M685 520 C850 520 885 410 1010 410"/>
+  <path class="line" d="M1105 450 C1105 490 1105 515 1105 555"/>
+  <path class="line dash" d="M1010 410 C930 410 930 250 1010 210"/>
+
+  <text class="text small" x="842" y="190">select/insert/update</text>
+  <text class="text small" x="836" y="392">POST messages</text>
+  <text class="text small" x="1118" y="510">有 key 時呼叫</text>
+  <text class="text small" x="865" y="336">查詢可預約時段</text>
+
+  <rect class="system" x="290" y="745" width="620" height="40" rx="10"/>
+  <text class="text small" x="315" y="771">Netlify 部署：npm run build -> dist；/.netlify/functions/chatbot；/* redirect 到 index.html</text>
+</svg>
