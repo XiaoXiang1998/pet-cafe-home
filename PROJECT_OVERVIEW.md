@@ -1,6 +1,6 @@
 ﻿# 小翔動物友善餐廳專案說明
 
-更新日期：2026-05-12
+更新日期：2026-07-04
 專案路徑：`D:\PetCafe`
 專案名稱：`pet-cafe-home`
 公開網站：[https://pet-cafe-home.netlify.app](https://pet-cafe-home.netlify.app)
@@ -14,7 +14,7 @@
 - Supabase Free：會員、資料表、RLS、RPC。
 - Netlify Free：靜態網站部署與 Functions。
 - Google Apps Script / Gmail：預約成功後寄信通知管理者。
-- AI 聊天：未設定 OpenAI API Key 時走免費規則式 fallback。
+- AI 聊天：Phase 1 預設 `AI_PROVIDER=none`，以 Supabase 的預約 RPC、`menu_items` 與 `knowledge_items` 作為可信資料來源。
 
 專案內另有 `petcafe-104-portfolio-video/`，該資料夾是作品影片素材與輸出，不屬於主站部署內容，部署時需要排除。
 
@@ -28,7 +28,7 @@
 | Auth / Database | Supabase |
 | 後端 API | Netlify Functions |
 | 預約通知 | Netlify Function + Google Apps Script + Gmail |
-| AI 聊天 | Netlify Function + OpenAI Responses API 或免費 fallback |
+| AI 聊天 | Netlify Function + Supabase grounded fallback |
 | 部署 | Netlify Production |
 | 主要語言 | JavaScript / JSX / TypeScript Function `.mts` / SQL / Google Apps Script |
 
@@ -86,7 +86,7 @@ D:\PetCafe
 | `src/components/Chatbot.jsx` | AI 小幫手聊天視窗 |
 | `src/lib/reservations.js` | 預約時段、時段開放判斷、RPC 結果轉換 |
 | `src/supabaseClient.js` | 讀取 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_ANON_KEY` 建立 client |
-| `netlify/functions/chatbot.mts` | 查詢預約時段、地址、特色、閒聊回覆；可使用 OpenAI 或 fallback |
+| `netlify/functions/chatbot.mts` | 查詢預約時段、菜單、地址、營業時間、店家規則與免費 fallback 回覆 |
 | `netlify/functions/notify-reservation.mts` | 預約後用會員 JWT 查詢該筆預約，再呼叫 Apps Script 寄 Gmail |
 | `google-apps-script/reservation-notify.gs` | 接收 Netlify Function webhook，用 GmailApp 寄信給管理者 |
 | `supabase/schema.sql` | Tables、Trigger、RPC、RLS、Grant 權限 |
@@ -300,7 +300,7 @@ flowchart TD
 
 - 地址尚未正式設定時，回覆「地址尚未設定，請聯繫店家確認。」
 - 詢問預約時段時，呼叫 `get_reservation_availability(check_date date)`。
-- 詢問菜單時，只讀取 `menu_items.is_active = true` 的品項。
+- 詢問菜單時，只讀取 `menu_items.is_active = true` 的品項；特定品項問題會用菜名與描述進行中文關鍵字評分，只回覆最高分相關品項。
 - 詢問店家知識時，只讀取 `knowledge_items.is_active = true` 的內容；資料缺失時不猜測。
 - AI 回覆不直接建立預約，只協助查詢與引導。
 - `AI_PROVIDER=none` 時一般聊天走免費 fallback。
@@ -359,6 +359,8 @@ flowchart TD
 ### 7.4 `menu_items`
 
 用途：資料庫菜單。
+
+目前 live Supabase 已同步前台預設 6 筆菜單，圖片 URL 沿用 `src/App.jsx` 的預設菜單資料。後台管理員可新增、編輯、停用菜單；AI 小幫手只會讀取 `is_active = true` 的品項。
 
 主要欄位：
 
@@ -570,6 +572,7 @@ npx esbuild netlify/functions/chatbot.mts --bundle --platform=node --format=esm 
 也應確認：
 
 - Supabase RPC 最後時段為 `21:00:00`。
+- `menu_items` 至少有啟用中的菜單資料，並可用匿名 key 讀取。
 - `feedbacks.admin_notes` 與 `feedbacks.handled_at` 已存在。
 - Apps Script webhook 回傳 `sent`。
 - Netlify notify health check 四項皆為 `true`。

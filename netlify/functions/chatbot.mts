@@ -230,6 +230,48 @@ const getMenuDescription = (item: MenuItem) =>
   getMenuText(item.labels?.desc, 'name') ||
   getMenuText(item.labels?.en, 'description');
 
+const normalizeSearchText = (text: string) => text.toLowerCase().replace(/\s+/g, '');
+
+const getMenuSearchTerms = (message: string) => {
+  const normalized = normalizeSearchText(message)
+    .replace(/多少錢|價格|菜單|餐點|有什麼|有哪些|什麼|推薦|menu|price|howmuch/gi, '');
+  const terms = new Set<string>();
+
+  normalized
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((term) => term.length >= 2)
+    .forEach((term) => terms.add(term));
+
+  for (let size = 2; size <= 4; size += 1) {
+    for (let index = 0; index <= normalized.length - size; index += 1) {
+      terms.add(normalized.slice(index, index + size));
+    }
+  }
+
+  ['湯', '麵', '飯', '餅', '茶', '咖啡', '拿鐵', '南瓜', '鮭魚', '雞胸', '莓果', '鬆餅'].forEach((term) => {
+    if (message.includes(term)) terms.add(term.toLowerCase());
+  });
+
+  return [...terms].filter((term) => term.length > 0);
+};
+
+const scoreMenuItem = (message: string, item: MenuItem) => {
+  const label = getMenuLabel(item);
+  const description = getMenuDescription(item);
+  const searchable = normalizeSearchText([label, description, String(item.price ?? '')].join(' '));
+  const normalizedMessage = normalizeSearchText(message);
+  const terms = getMenuSearchTerms(message);
+
+  if (!terms.length) return 0;
+
+  let score = normalizedMessage.includes(normalizeSearchText(label)) ? 20 : 0;
+  terms.forEach((term) => {
+    if (searchable.includes(term)) score += term.length >= 2 ? term.length : 1;
+  });
+
+  return score;
+};
+
 const fetchMenuItems = async (message: string) => {
   const query = encodeURIComponent('labels,price,image');
   const result = await supabaseFetch<MenuItem[]>(
@@ -238,19 +280,11 @@ const fetchMenuItems = async (message: string) => {
 
   if (result.error || !result.data) return result;
 
-  const normalizedMessage = message.toLowerCase();
-  const filtered = result.data.filter((item) => {
-    const searchable = [getMenuLabel(item), getMenuDescription(item), String(item.price ?? '')]
-      .join(' ')
-      .toLowerCase();
-    return (
-      !keywordMatch(message, [/多少錢|價格|price/i]) ||
-      searchable
-        .split(/\s+/)
-        .some((token) => token.length > 1 && normalizedMessage.includes(token.toLowerCase())) ||
-      normalizedMessage.includes(getMenuLabel(item).toLowerCase())
-    );
-  });
+  const scored = result.data
+    .map((item) => ({ item, score: scoreMenuItem(message, item) }))
+    .sort((a, b) => b.score - a.score);
+  const maxScore = scored[0]?.score ?? 0;
+  const filtered = maxScore > 0 ? scored.filter(({ score }) => score === maxScore).map(({ item }) => item) : result.data;
 
   return { data: filtered.length ? filtered : result.data };
 };
@@ -357,7 +391,7 @@ const buildMenuReply = (result: DataResult<MenuItem[]>) => {
   const itemText = items
     .slice(0, MAX_MENU_ITEMS)
     .map((item) => {
-      const description = getMenuDescription(item);
+      const description = getMenuDescription(item).replace(/[。；;,\s]+$/u, '');
       return `${getMenuLabel(item)}：NT$${item.price ?? 0}${description ? `，${description}` : ''}`;
     })
     .join('；');
