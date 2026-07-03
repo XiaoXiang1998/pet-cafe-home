@@ -142,6 +142,31 @@ const parseRequestedDate = (message: string, today: string) => {
 const keywordMatch = (message: string, keywords: RegExp[]) =>
   keywords.some((keyword) => keyword.test(message));
 
+const getKnowledgeSignals = (message: string) => {
+  const signals = new Set<string>();
+  const normalized = message.toLowerCase();
+
+  const signalGroups: Array<[RegExp, string[]]> = [
+    [/巧克力|chocolate/i, ['巧克力', '不能吃', '中毒', '狗狗飲食']],
+    [/大型犬|大狗|大型狗/i, ['大型犬', '大狗', '牽繩', '推車']],
+    [/可以帶|可帶|能帶|帶.*(寵物|毛孩|狗|貓|犬)/i, ['可帶寵物', '貓狗同行', '寵物同行']],
+    [/貓|貓咪/i, ['貓', '貓咪', '外出籠']],
+    [/狗|狗狗|犬/i, ['狗', '狗狗', '犬', '牽繩']],
+    [/地址|在哪|位置|交通/i, ['地址', '位置', '交通']],
+    [/營業時間|幾點|開門|開到/i, ['營業時間', '開門', '開到']],
+    [/取消|改期|退訂/i, ['取消', '改期', '退訂']],
+    [/低消|用餐時間|限制/i, ['低消', '用餐時間', '限制']],
+  ];
+
+  signalGroups.forEach(([pattern, terms]) => {
+    if (pattern.test(normalized)) {
+      terms.forEach((term) => signals.add(term.toLowerCase()));
+    }
+  });
+
+  return [...signals];
+};
+
 const classifyIntent = (message: string): Intent => {
   if (keywordMatch(message, [/醫療|生病|吐|吃藥|獸醫|診斷|法律|合約|投資|股票|借貸|保險/i])) {
     return 'high_risk';
@@ -250,19 +275,37 @@ const fetchKnowledgeItems = async (message: string) => {
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((term) => term.length >= 2);
+  const signals = getKnowledgeSignals(message);
+  const normalizedMessage = message.toLowerCase();
 
   const scored = result.data
     .map((item) => {
-      const searchable = [item.category, item.title, item.content, ...(item.keywords || [])]
+      const keywords = item.keywords || [];
+      const searchable = [item.category, item.title, item.content, ...keywords]
         .join(' ')
         .toLowerCase();
-      const score = terms.reduce((total, term) => total + (searchable.includes(term) ? 1 : 0), 0);
+      const termScore = terms.reduce(
+        (total, term) => total + (searchable.includes(term) ? 1 : 0),
+        0,
+      );
+      const signalScore = signals.reduce(
+        (total, signal) => total + (searchable.includes(signal) ? 3 : 0),
+        0,
+      );
+      const keywordScore = keywords.reduce((total, keyword) => {
+        const normalizedKeyword = keyword.toLowerCase();
+        return total + (normalizedKeyword.length >= 2 && normalizedMessage.includes(normalizedKeyword) ? 5 : 0);
+      }, 0);
+      const score = termScore + signalScore + keywordScore;
       return { item, score };
     })
-    .sort((a, b) => b.score - a.score)
-    .map(({ item }) => item);
+    .sort((a, b) => b.score - a.score);
 
-  return { data: scored.slice(0, MAX_KNOWLEDGE_ITEMS) };
+  const maxScore = scored[0]?.score ?? 0;
+  const matched = scored.filter(({ score }) => score > 0);
+  const selected = maxScore >= 5 ? scored.filter(({ score }) => score === maxScore) : matched;
+
+  return { data: (selected.length ? selected : scored).slice(0, MAX_KNOWLEDGE_ITEMS).map(({ item }) => item) };
 };
 
 const buildAvailabilityReply = (dateText: string | null, result: DataResult<AvailabilityRow[]> | null) => {
