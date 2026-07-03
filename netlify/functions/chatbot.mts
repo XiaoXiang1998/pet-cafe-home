@@ -22,7 +22,7 @@ type AvailabilityRow = {
 };
 
 type MenuItem = {
-  labels?: Record<string, string>;
+  labels?: Record<string, string | { name?: string; description?: string }>;
   price?: number;
   image?: string;
 };
@@ -209,11 +209,26 @@ const fetchAvailability = (dateText: string) =>
     body: JSON.stringify({ check_date: dateText }),
   });
 
+const getMenuText = (value: string | { name?: string; description?: string } | undefined, field: 'name' | 'description') => {
+  if (!value) return '';
+  if (typeof value === 'string') return field === 'name' ? value : '';
+  return value[field] || '';
+};
+
 const getMenuLabel = (item: MenuItem) =>
-  item.labels?.zh || item.labels?.zh_TW || item.labels?.name || item.labels?.en || '未命名品項';
+  getMenuText(item.labels?.zh, 'name') ||
+  getMenuText(item.labels?.zh_TW, 'name') ||
+  getMenuText(item.labels?.name, 'name') ||
+  getMenuText(item.labels?.en, 'name') ||
+  '未命名品項';
 
 const getMenuDescription = (item: MenuItem) =>
-  item.labels?.description_zh || item.labels?.description || item.labels?.desc || '';
+  getMenuText(item.labels?.zh, 'description') ||
+  getMenuText(item.labels?.zh_TW, 'description') ||
+  getMenuText(item.labels?.description_zh, 'name') ||
+  getMenuText(item.labels?.description, 'name') ||
+  getMenuText(item.labels?.desc, 'name') ||
+  getMenuText(item.labels?.en, 'description');
 
 const fetchMenuItems = async (message: string) => {
   const query = encodeURIComponent('labels,price,image');
