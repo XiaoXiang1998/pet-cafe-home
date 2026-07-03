@@ -72,3 +72,24 @@ OPENAI_MODEL=gpt-5-nano
 - `src/App.jsx` 與 `netlify/functions/chatbot.mts` 目前有大量中文文案呈現 mojibake 亂碼。文件中的功能判讀以可驗證的程式結構、Supabase 呼叫、schema 與設定檔為準。
 - 若 Supabase 未設定，部分功能會退回前端暫存或提示設定缺失；正式環境應設定 Supabase URL 與 anon key。
 - 若未設定有效 `OPENAI_API_KEY`，AI 客服會使用 `free-fallback` 模式，不會呼叫 OpenAI API。
+
+## Phase 1 grounded chatbot
+
+The chatbot function now defaults to `AI_PROVIDER=none` and uses Supabase-backed facts instead of paid AI providers for cafe questions.
+
+Supported Phase 1 intents:
+
+- Reservation availability: calls `get_reservation_availability(check_date date)` and only reports available slots.
+- Menu questions: reads active rows from `menu_items`.
+- Store FAQ, rules, address, business hours, and policies: reads active rows from `knowledge_items`.
+- High-risk medical, legal, or financial questions: returns a conservative safety response.
+- General chat: returns a free fallback when `AI_PROVIDER=none`.
+
+Phase 1 intentionally does not implement Ollama, OpenAI, OpenRouter, Groq, Gemini, embeddings, vector RAG, knowledge-base admin UI, or AI-created reservation changes.
+
+Validation:
+
+```powershell
+npm run build
+npx esbuild netlify/functions/chatbot.mts --bundle --platform=node --format=esm --outfile=%TEMP%\chatbot-test.mjs
+```

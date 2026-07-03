@@ -45,12 +45,42 @@ create table if not exists public.menu_items (
   updated_at timestamptz default now()
 );
 
+create table if not exists public.knowledge_items (
+  id uuid primary key default gen_random_uuid(),
+  category text not null,
+  title text not null,
+  content text not null,
+  keywords text[] not null default '{}',
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  constraint knowledge_items_category_check check (
+    category in (
+      'store_info',
+      'business_hours',
+      'address',
+      'pet_rules',
+      'reservation_rules',
+      'cancellation_rules',
+      'faq',
+      'policy'
+    )
+  )
+);
 alter table public.profiles
   add column if not exists role text not null default 'user';
 
 alter table public.feedbacks
   add column if not exists status text not null default 'new',
   add column if not exists is_visible boolean not null default true;
+alter table public.knowledge_items
+  add column if not exists category text not null default 'faq',
+  add column if not exists title text not null default '',
+  add column if not exists content text not null default '',
+  add column if not exists keywords text[] not null default '{}',
+  add column if not exists is_active boolean not null default true,
+  add column if not exists created_at timestamptz default now(),
+  add column if not exists updated_at timestamptz default now();
 
 do $$
 begin
@@ -72,6 +102,26 @@ begin
   ) then
     alter table public.feedbacks
       add constraint feedbacks_status_check check (status in ('new', 'reviewing', 'resolved', 'hidden'));
+  end if;
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'knowledge_items_category_check'
+      and conrelid = 'public.knowledge_items'::regclass
+  ) then
+    alter table public.knowledge_items
+      add constraint knowledge_items_category_check check (
+        category in (
+          'store_info',
+          'business_hours',
+          'address',
+          'pet_rules',
+          'reservation_rules',
+          'cancellation_rules',
+          'faq',
+          'policy'
+        )
+      );
   end if;
 end;
 $$;
@@ -192,6 +242,7 @@ alter table public.profiles enable row level security;
 alter table public.reservations enable row level security;
 alter table public.feedbacks enable row level security;
 alter table public.menu_items enable row level security;
+alter table public.knowledge_items enable row level security;
 
 drop policy if exists "Users can read own profile" on public.profiles;
 drop policy if exists "Users can update own profile" on public.profiles;
@@ -208,6 +259,8 @@ drop policy if exists "Admins can read feedback" on public.feedbacks;
 drop policy if exists "Admins can update feedback" on public.feedbacks;
 drop policy if exists "Anyone can read active menu items" on public.menu_items;
 drop policy if exists "Admins can manage menu items" on public.menu_items;
+drop policy if exists "Anyone can read active knowledge items" on public.knowledge_items;
+drop policy if exists "Admins can manage knowledge items" on public.knowledge_items;
 
 create policy "Users can read own profile"
 on public.profiles
@@ -290,6 +343,18 @@ for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+create policy "Anyone can read active knowledge items"
+on public.knowledge_items
+for select
+to anon, authenticated
+using (is_active = true);
+
+create policy "Admins can manage knowledge items"
+on public.knowledge_items
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 grant usage on schema public to anon, authenticated;
 
@@ -307,6 +372,9 @@ grant update(status) on public.reservations to authenticated;
 
 grant select on public.menu_items to anon;
 grant select, insert, update on public.menu_items to authenticated;
+
+grant select on public.knowledge_items to anon;
+grant select, insert, update on public.knowledge_items to authenticated;
 
 revoke all on function public.is_email_registered(text) from public;
 grant execute on function public.is_email_registered(text) to anon, authenticated;
