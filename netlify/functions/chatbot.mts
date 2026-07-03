@@ -157,7 +157,7 @@ const classifyIntent = (message: string): Intent => {
 
   if (
     keywordMatch(message, [
-      /地址|在哪|營業時間|幾點|規則|大型犬|寵物|低消|取消|政策|停車|電話|FAQ|faq|address|hours|policy|rule/i,
+      /地址|在哪|營業時間|幾點|規則|大型犬|寵物|毛孩|狗|貓|可帶|可以帶|能帶|帶.*(寵物|毛孩|狗|貓|犬)|(寵物|毛孩|狗|貓|犬).*(同行|入內|限制|接受|可以|可不可以)|低消|取消|政策|停車|電話|FAQ|faq|address|hours|policy|rule/i,
     ])
   ) {
     return 'store_knowledge';
@@ -220,7 +220,13 @@ const getKnowledgeCategories = (message: string) => {
 
   if (/地址|在哪|停車|電話|address/i.test(message)) categories.add('address');
   if (/營業時間|幾點|hours|開到|開門/i.test(message)) categories.add('business_hours');
-  if (/寵物|大型犬|毛孩|pet|dog|cat|規則/i.test(message)) categories.add('pet_rules');
+  if (
+    /寵物|大型犬|毛孩|狗|貓|犬|可帶|可以帶|能帶|帶.*(寵物|毛孩|狗|貓|犬)|(寵物|毛孩|狗|貓|犬).*(同行|入內|限制|接受|可以|可不可以)|pet|dog|cat|規則/i.test(
+      message,
+    )
+  ) {
+    categories.add('pet_rules');
+  }
   if (/預約|訂位|reservation|booking|候位/i.test(message)) categories.add('reservation_rules');
   if (/取消|改期|退訂|cancel/i.test(message)) categories.add('cancellation_rules');
   if (/低消|政策|規定|policy|rule/i.test(message)) categories.add('policy');
@@ -316,7 +322,7 @@ const buildHighRiskReply = () =>
   '這類問題可能涉及醫療、法律、金融或其他高風險判斷。我只能提供一般資訊，不能做診斷、用藥、法律或投資建議；請洽詢合格獸醫、律師、財務顧問或相關專業人士。';
 
 const buildNoneProviderReply = () =>
-  '目前 AI_PROVIDER=none，免費 fallback 只回答店家資料、菜單與預約時段。一般聊天暫不使用付費或外部模型。';
+  '我目前可以幫你查店家資料、菜單與可預約時段。你可以問我「今天有哪些時段能訂位？」、「有什麼餐點？」或「可以帶什麼寵物？」';
 
 export default async (req: Request) => {
   if (req.method !== 'POST') {
@@ -363,7 +369,7 @@ export default async (req: Request) => {
   }
 
   return jsonResponse({
-    reply: `AI_PROVIDER=${provider} 尚未在 Phase 1 啟用。免費 fallback 仍可回答店家資料、菜單與預約時段。`,
+    reply: '我目前可以幫你查店家資料、菜單與可預約時段；其他閒聊功能暫時還沒有開放。',
     intent,
     mode: 'free-fallback',
   });
