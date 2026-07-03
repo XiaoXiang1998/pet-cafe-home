@@ -1,21 +1,91 @@
-const DEFAULT_MODEL = 'gpt-5-nano';
-const CAFE_ADDRESS = '地址尚未設定，請聯繫店家確認。';
-const BUSINESS_HOURS = '10:00 - 22:00';
 const TIME_ZONE = 'Asia/Taipei';
+const MAX_MENU_ITEMS = 8;
+const MAX_KNOWLEDGE_ITEMS = 5;
 
-const jsonResponse = (body, status = 200) =>
+type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+type Intent =
+  | 'reservation_availability'
+  | 'menu'
+  | 'store_knowledge'
+  | 'general_chat'
+  | 'high_risk';
+
+type AvailabilityRow = {
+  slot_time: string;
+  booked_count: number;
+  remaining_count: number;
+  is_available: boolean;
+};
+
+type MenuItem = {
+  labels?: Record<string, string | { name?: string; description?: string }>;
+  price?: number;
+  image?: string;
+};
+
+type KnowledgeItem = {
+  category: string;
+  title: string;
+  content: string;
+  keywords?: string[];
+};
+
+type DataResult<T> = {
+  data?: T;
+  error?: string;
+};
+
+const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
 
-const getEnv = (key) => {
+const getEnv = (key: string) => {
   const netlifyGlobal = globalThis as typeof globalThis & {
     Netlify?: { env?: { get?: (name: string) => string | undefined } };
     process?: { env?: Record<string, string | undefined> };
   };
 
   return netlifyGlobal.Netlify?.env?.get?.(key) || netlifyGlobal.process?.env?.[key] || '';
+};
+
+const getSupabaseConfig = () => {
+  const url = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
+  const anonKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
+
+  if (!url || !anonKey) {
+    return { error: 'Supabase URL 或 anon key 尚未設定，無法查詢可信店家資料。' };
+  }
+
+  return { url: url.replace(/\/$/, ''), anonKey };
+};
+
+const supabaseFetch = async <T>(path: string, init: RequestInit = {}): Promise<DataResult<T>> => {
+  const config = getSupabaseConfig();
+  if ('error' in config) return { error: config.error };
+
+  const response = await fetch(`${config.url}${path}`, {
+    ...init,
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${config.anonKey}`,
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    return { error: data?.message || 'Supabase 查詢失敗，請稍後再試。' };
+  }
+
+  return { data: data as T };
 };
 
 const getTaipeiDate = (date = new Date()) =>
@@ -26,13 +96,13 @@ const getTaipeiDate = (date = new Date()) =>
     day: '2-digit',
   }).format(date);
 
-const addDays = (dateText, days) => {
+const addDays = (dateText: string, days: number) => {
   const date = new Date(`${dateText}T00:00:00+08:00`);
   date.setUTCDate(date.getUTCDate() + days);
   return getTaipeiDate(date);
 };
 
-const isValidDate = (year, month, day) => {
+const isValidDate = (year: number, month: number, day: number) => {
   const date = new Date(Date.UTC(year, month - 1, day));
   return (
     date.getUTCFullYear() === year &&
@@ -41,14 +111,14 @@ const isValidDate = (year, month, day) => {
   );
 };
 
-const toDateText = (year, month, day) => {
+const toDateText = (year: number, month: number, day: number) => {
   if (!isValidDate(year, month, day)) return null;
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 };
 
-const parseRequestedDate = (message, today) => {
-  if (/今天|今日/.test(message)) return today;
-  if (/明天|明日/.test(message)) return addDays(today, 1);
+const parseRequestedDate = (message: string, today: string) => {
+  if (/今天|今日|today/i.test(message)) return today;
+  if (/明天|明日|tomorrow/i.test(message)) return addDays(today, 1);
   if (/後天/.test(message)) return addDays(today, 2);
 
   const fullDate = message.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
@@ -69,109 +139,59 @@ const parseRequestedDate = (message, today) => {
   return null;
 };
 
-const hasAvailabilityIntent = (message) =>
-  /預約|訂位|定位|空位|位置|位子|時段|時間|還有|available|reserve|booking|book/i.test(message);
+const keywordMatch = (message: string, keywords: RegExp[]) =>
+  keywords.some((keyword) => keyword.test(message));
 
-const formatSlotTime = (slotTime) => String(slotTime || '').slice(0, 5);
+const getKnowledgeSignals = (message: string) => {
+  const signals = new Set<string>();
+  const normalized = message.toLowerCase();
 
-const fetchAvailability = async (dateText) => {
-  const supabaseUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL');
-  const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY');
+  const signalGroups: Array<[RegExp, string[]]> = [
+    [/巧克力|chocolate/i, ['巧克力', '不能吃', '中毒', '狗狗飲食']],
+    [/大型犬|大狗|大型狗/i, ['大型犬', '大狗', '牽繩', '推車']],
+    [/可以帶|可帶|能帶|帶.*(寵物|毛孩|狗|貓|犬)/i, ['可帶寵物', '貓狗同行', '寵物同行']],
+    [/貓|貓咪/i, ['貓', '貓咪', '外出籠']],
+    [/狗|狗狗|犬/i, ['狗', '狗狗', '犬', '牽繩']],
+    [/地址|在哪|位置|交通/i, ['地址', '位置', '交通']],
+    [/營業時間|幾點|開門|開到/i, ['營業時間', '開門', '開到']],
+    [/取消|改期|退訂/i, ['取消', '改期', '退訂']],
+    [/低消|用餐時間|限制/i, ['低消', '用餐時間', '限制']],
+  ];
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return { error: 'Supabase 環境變數尚未設定，無法查詢預約時段。' };
-  }
-
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/get_reservation_availability`, {
-    method: 'POST',
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ check_date: dateText }),
+  signalGroups.forEach(([pattern, terms]) => {
+    if (pattern.test(normalized)) {
+      terms.forEach((term) => signals.add(term.toLowerCase()));
+    }
   });
 
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    return { error: data?.message || '無法查詢預約時段，請稍後再試。' };
-  }
-
-  return { data: Array.isArray(data) ? data : [] };
+  return [...signals];
 };
 
-const buildAvailabilitySummary = (dateText, availabilityResult) => {
-  if (!dateText) {
-    return '使用者想查詢預約時段但沒有提供明確日期，請請使用者補上日期。';
+const classifyIntent = (message: string): Intent => {
+  if (keywordMatch(message, [/醫療|生病|吐|吃藥|獸醫|診斷|法律|合約|投資|股票|借貸|保險/i])) {
+    return 'high_risk';
   }
 
-  if (availabilityResult?.error) {
-    return `使用者查詢 ${dateText} 的預約時段，但系統查詢失敗：${availabilityResult.error}`;
+  if (keywordMatch(message, [/預約|訂位|空位|位子|時段|候位|available|reserve|booking|book/i])) {
+    return 'reservation_availability';
   }
 
-  const rows = availabilityResult?.data ?? [];
-  const availableRows = rows.filter((row) => row.is_available && Number(row.remaining_count) > 0);
-
-  if (!availableRows.length) {
-    return `${dateText} 目前沒有可預約時段。若此日期已經過去，請明確回答過去日期不可預約。`;
+  if (keywordMatch(message, [/菜單|餐點|價格|多少錢|咖啡|甜點|寵物餐|menu|coffee|dessert|price/i])) {
+    return 'menu';
   }
 
-  const availableText = availableRows
-    .map(
-      (row) =>
-        `${formatSlotTime(row.slot_time)} 剩 ${Number(row.remaining_count)} 組` +
-        `（已預約 ${Number(row.booked_count)} 組）`,
-    )
-    .join('、');
+  if (
+    keywordMatch(message, [
+      /地址|在哪|營業時間|幾點|規則|大型犬|寵物|毛孩|狗|貓|可帶|可以帶|能帶|帶.*(寵物|毛孩|狗|貓|犬)|(寵物|毛孩|狗|貓|犬).*(同行|入內|限制|接受|可以|可不可以)|低消|取消|政策|停車|電話|FAQ|faq|address|hours|policy|rule/i,
+    ])
+  ) {
+    return 'store_knowledge';
+  }
 
-  return `${dateText} 可預約時段如下：${availableText}。每個時段最多 6 組，僅統計 pending 與 confirmed 預約。`;
+  return 'general_chat';
 };
 
-const buildAvailabilityReply = (dateText, availabilityResult) => {
-  if (!dateText) {
-    return '可以，我需要先知道日期。請輸入像「5/14 還有哪些時間可以預約？」這樣的問題。';
-  }
-
-  if (availabilityResult?.error) {
-    return `目前預約查詢尚未完成資料庫設定：${availabilityResult.error}`;
-  }
-
-  const rows = availabilityResult?.data ?? [];
-  const availableRows = rows.filter((row) => row.is_available && Number(row.remaining_count) > 0);
-
-  if (!availableRows.length) {
-    return `${dateText} 目前沒有可預約時段，或該日期已不可預約。`;
-  }
-
-  const timeText = availableRows
-    .map((row) => `${formatSlotTime(row.slot_time)}（剩 ${Number(row.remaining_count)} 組）`)
-    .join('、');
-
-  return `${dateText} 目前可預約：${timeText}。要正式訂位請使用網站預約表單。`;
-};
-
-const buildFreeFallbackReply = (message, askedAvailability, requestedDate, availabilityResult) => {
-  if (askedAvailability) {
-    return buildAvailabilityReply(requestedDate, availabilityResult);
-  }
-
-  if (/地址|地點|在哪|位置|怎麼去|address/i.test(message)) {
-    return CAFE_ADDRESS;
-  }
-
-  if (/特色|介紹|寵物友善|貓|狗|餐廳|咖啡廳|feature|about/i.test(message)) {
-    return '小翔動物友善餐廳歡迎貓貓狗狗同行，提供線上預約、三語菜單、評論與客訴回饋，適合和毛孩一起放鬆用餐。';
-  }
-
-  if (/菜單|餐點|menu|吃什麼|飲料|咖啡/i.test(message)) {
-    return '菜單有中英文日文介紹，包含早午餐、咖啡、甜點與毛孩友善小點。你可以到頁面上的「菜單」區查看完整品項。';
-  }
-
-  return '我在這裡陪你聊聊，也可以幫你查預約時段、餐廳特色與地址。想查時段的話，請直接告訴我日期。';
-};
-
-const normalizeMessages = (messages) =>
+const normalizeMessages = (messages: unknown): ChatMessage[] =>
   (Array.isArray(messages) ? messages : [])
     .filter((message) => message && typeof message.content === 'string')
     .slice(-8)
@@ -181,24 +201,224 @@ const normalizeMessages = (messages) =>
     }))
     .filter((message) => message.content);
 
-const extractOutputText = (data) => {
-  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
-    return data.output_text.trim();
-  }
+const formatSlotTime = (slotTime: string) => String(slotTime || '').slice(0, 5);
 
-  const text = data?.output
-    ?.flatMap((item) => item.content ?? [])
-    ?.map((content) => content.text)
-    ?.filter(Boolean)
-    ?.join('\n')
-    ?.trim();
+const fetchAvailability = (dateText: string) =>
+  supabaseFetch<AvailabilityRow[]>('/rest/v1/rpc/get_reservation_availability', {
+    method: 'POST',
+    body: JSON.stringify({ check_date: dateText }),
+  });
 
-  return text || '';
+const getMenuText = (value: string | { name?: string; description?: string } | undefined, field: 'name' | 'description') => {
+  if (!value) return '';
+  if (typeof value === 'string') return field === 'name' ? value : '';
+  return value[field] || '';
 };
 
-export default async (req) => {
+const getMenuLabel = (item: MenuItem) =>
+  getMenuText(item.labels?.zh, 'name') ||
+  getMenuText(item.labels?.zh_TW, 'name') ||
+  getMenuText(item.labels?.name, 'name') ||
+  getMenuText(item.labels?.en, 'name') ||
+  '未命名品項';
+
+const getMenuDescription = (item: MenuItem) =>
+  getMenuText(item.labels?.zh, 'description') ||
+  getMenuText(item.labels?.zh_TW, 'description') ||
+  getMenuText(item.labels?.description_zh, 'name') ||
+  getMenuText(item.labels?.description, 'name') ||
+  getMenuText(item.labels?.desc, 'name') ||
+  getMenuText(item.labels?.en, 'description');
+
+const normalizeSearchText = (text: string) => text.toLowerCase().replace(/\s+/g, '');
+
+const getMenuSearchTerms = (message: string) => {
+  const normalized = normalizeSearchText(message)
+    .replace(/多少錢|價格|菜單|餐點|有什麼|有哪些|什麼|推薦|menu|price|howmuch/gi, '');
+  const terms = new Set<string>();
+
+  normalized
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((term) => term.length >= 2)
+    .forEach((term) => terms.add(term));
+
+  for (let size = 2; size <= 4; size += 1) {
+    for (let index = 0; index <= normalized.length - size; index += 1) {
+      terms.add(normalized.slice(index, index + size));
+    }
+  }
+
+  ['湯', '麵', '飯', '餅', '茶', '咖啡', '拿鐵', '南瓜', '鮭魚', '雞胸', '莓果', '鬆餅'].forEach((term) => {
+    if (message.includes(term)) terms.add(term.toLowerCase());
+  });
+
+  return [...terms].filter((term) => term.length > 0);
+};
+
+const scoreMenuItem = (message: string, item: MenuItem) => {
+  const label = getMenuLabel(item);
+  const description = getMenuDescription(item);
+  const searchable = normalizeSearchText([label, description, String(item.price ?? '')].join(' '));
+  const normalizedMessage = normalizeSearchText(message);
+  const terms = getMenuSearchTerms(message);
+
+  if (!terms.length) return 0;
+
+  let score = normalizedMessage.includes(normalizeSearchText(label)) ? 20 : 0;
+  terms.forEach((term) => {
+    if (searchable.includes(term)) score += term.length >= 2 ? term.length : 1;
+  });
+
+  return score;
+};
+
+const fetchMenuItems = async (message: string) => {
+  const query = encodeURIComponent('labels,price,image');
+  const result = await supabaseFetch<MenuItem[]>(
+    `/rest/v1/menu_items?select=${query}&is_active=eq.true&order=sort_order.asc&limit=20`,
+  );
+
+  if (result.error || !result.data) return result;
+
+  const scored = result.data
+    .map((item) => ({ item, score: scoreMenuItem(message, item) }))
+    .sort((a, b) => b.score - a.score);
+  const maxScore = scored[0]?.score ?? 0;
+  const filtered = maxScore > 0 ? scored.filter(({ score }) => score === maxScore).map(({ item }) => item) : result.data;
+
+  return { data: filtered.length ? filtered : result.data };
+};
+
+const getKnowledgeCategories = (message: string) => {
+  const categories = new Set<string>();
+
+  if (/地址|在哪|停車|電話|address/i.test(message)) categories.add('address');
+  if (/營業時間|幾點|hours|開到|開門/i.test(message)) categories.add('business_hours');
+  if (
+    /寵物|大型犬|毛孩|狗|貓|犬|可帶|可以帶|能帶|帶.*(寵物|毛孩|狗|貓|犬)|(寵物|毛孩|狗|貓|犬).*(同行|入內|限制|接受|可以|可不可以)|pet|dog|cat|規則/i.test(
+      message,
+    )
+  ) {
+    categories.add('pet_rules');
+  }
+  if (/預約|訂位|reservation|booking|候位/i.test(message)) categories.add('reservation_rules');
+  if (/取消|改期|退訂|cancel/i.test(message)) categories.add('cancellation_rules');
+  if (/低消|政策|規定|policy|rule/i.test(message)) categories.add('policy');
+  if (!categories.size) categories.add('faq');
+
+  return [...categories];
+};
+
+const fetchKnowledgeItems = async (message: string) => {
+  const categories = getKnowledgeCategories(message);
+  const categoryFilter = categories.map((category) => `"${category}"`).join(',');
+  const query = encodeURIComponent('category,title,content,keywords');
+
+  const result = await supabaseFetch<KnowledgeItem[]>(
+    `/rest/v1/knowledge_items?select=${query}&is_active=eq.true&category=in.(${categoryFilter})&order=updated_at.desc&limit=12`,
+  );
+
+  if (result.error || !result.data) return result;
+
+  const terms = message
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((term) => term.length >= 2);
+  const signals = getKnowledgeSignals(message);
+  const normalizedMessage = message.toLowerCase();
+
+  const scored = result.data
+    .map((item) => {
+      const keywords = item.keywords || [];
+      const searchable = [item.category, item.title, item.content, ...keywords]
+        .join(' ')
+        .toLowerCase();
+      const termScore = terms.reduce(
+        (total, term) => total + (searchable.includes(term) ? 1 : 0),
+        0,
+      );
+      const signalScore = signals.reduce(
+        (total, signal) => total + (searchable.includes(signal) ? 3 : 0),
+        0,
+      );
+      const keywordScore = keywords.reduce((total, keyword) => {
+        const normalizedKeyword = keyword.toLowerCase();
+        return total + (normalizedKeyword.length >= 2 && normalizedMessage.includes(normalizedKeyword) ? 5 : 0);
+      }, 0);
+      const score = termScore + signalScore + keywordScore;
+      return { item, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const maxScore = scored[0]?.score ?? 0;
+  const matched = scored.filter(({ score }) => score > 0);
+  const selected = maxScore >= 5 ? scored.filter(({ score }) => score === maxScore) : matched;
+
+  return { data: (selected.length ? selected : scored).slice(0, MAX_KNOWLEDGE_ITEMS).map(({ item }) => item) };
+};
+
+const buildAvailabilityReply = (dateText: string | null, result: DataResult<AvailabilityRow[]> | null) => {
+  if (!dateText) {
+    return '可以幫你查預約可用時段，請提供日期，例如「明天晚上還有位子嗎？」或「5/14 有哪些時段可以預約？」';
+  }
+
+  if (result?.error) {
+    return `目前無法查詢 ${dateText} 的預約可用時段：${result.error}`;
+  }
+
+  const rows = result?.data ?? [];
+  const availableRows = rows.filter((row) => row.is_available && Number(row.remaining_count) > 0);
+
+  if (!availableRows.length) {
+    return `${dateText} 目前沒有可預約時段。客服不會直接建立或修改預約，請改選其他日期或使用網站預約表單確認。`;
+  }
+
+  const times = availableRows
+    .map((row) => `${formatSlotTime(row.slot_time)} 剩 ${Number(row.remaining_count)} 組`)
+    .join('、');
+
+  return `${dateText} 目前可預約時段：${times}。每個時段最多 6 組，正式訂位請使用網站預約表單完成。`;
+};
+
+const buildMenuReply = (result: DataResult<MenuItem[]>) => {
+  if (result.error) return `目前無法查詢菜單資料：${result.error}`;
+
+  const items = result.data ?? [];
+  if (!items.length) {
+    return '目前沒有可公開查詢的啟用中菜單品項，店家尚未設定菜單資料。';
+  }
+
+  const itemText = items
+    .slice(0, MAX_MENU_ITEMS)
+    .map((item) => {
+      const description = getMenuDescription(item).replace(/[。；;,\s]+$/u, '');
+      return `${getMenuLabel(item)}：NT$${item.price ?? 0}${description ? `，${description}` : ''}`;
+    })
+    .join('；');
+
+  return `目前查到的啟用中菜單品項有：${itemText}。價格與品項以店家資料庫目前設定為準。`;
+};
+
+const buildKnowledgeReply = (result: DataResult<KnowledgeItem[]>) => {
+  if (result.error) return `目前無法查詢店家知識資料：${result.error}`;
+
+  const items = result.data ?? [];
+  if (!items.length) {
+    return '這項店家資料目前尚未設定，所以我不能自行猜測地址、營業時間、規則或政策。';
+  }
+
+  return items.map((item) => `${item.title}：${item.content}`).join('\n');
+};
+
+const buildHighRiskReply = () =>
+  '這類問題可能涉及醫療、法律、金融或其他高風險判斷。我只能提供一般資訊，不能做診斷、用藥、法律或投資建議；請洽詢合格獸醫、律師、財務顧問或相關專業人士。';
+
+const buildNoneProviderReply = () =>
+  '我目前可以幫你查店家資料、菜單與可預約時段。你可以問我「今天有哪些時段能訂位？」、「有什麼餐點？」或「可以帶什麼寵物？」';
+
+export default async (req: Request) => {
   if (req.method !== 'POST') {
-    return jsonResponse({ error: '只支援 POST 請求。' }, 405);
+    return jsonResponse({ error: '只接受 POST 請求。' }, 405);
   }
 
   const payload = await req.json().catch(() => null);
@@ -206,73 +426,43 @@ export default async (req) => {
   const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
 
   if (!latestUserMessage) {
-    return jsonResponse({ error: '請先輸入想詢問的內容。' }, 400);
+    return jsonResponse({ error: '請提供使用者訊息。' }, 400);
   }
 
-  const today = getTaipeiDate();
-  const askedAvailability = hasAvailabilityIntent(latestUserMessage.content);
-  const requestedDate = askedAvailability ? parseRequestedDate(latestUserMessage.content, today) : null;
-  const availabilityResult = requestedDate ? await fetchAvailability(requestedDate) : null;
-  const availabilitySummary = askedAvailability
-    ? buildAvailabilitySummary(requestedDate, availabilityResult)
-    : '這次沒有查詢特定日期的預約時段。';
-  const openAiKey = getEnv('OPENAI_API_KEY');
+  const intent = classifyIntent(latestUserMessage.content);
+  const provider = (getEnv('AI_PROVIDER') || 'none').toLowerCase();
 
-  if (!openAiKey || !openAiKey.startsWith('sk-')) {
+  if (intent === 'high_risk') {
+    return jsonResponse({ reply: buildHighRiskReply(), intent, mode: 'grounded-fallback' });
+  }
+
+  if (intent === 'reservation_availability') {
+    const requestedDate = parseRequestedDate(latestUserMessage.content, getTaipeiDate());
+    const availabilityResult = requestedDate ? await fetchAvailability(requestedDate) : null;
     return jsonResponse({
-      reply: buildFreeFallbackReply(
-        latestUserMessage.content,
-        askedAvailability,
-        requestedDate,
-        availabilityResult,
-      ),
-      mode: 'free-fallback',
+      reply: buildAvailabilityReply(requestedDate, availabilityResult),
+      intent,
+      mode: 'grounded-supabase',
     });
   }
 
-  const systemPrompt = [
-    '你是「小翔動物友善餐廳」網站的 AI 小幫手，使用繁體中文回答。',
-    '語氣溫暖、簡短、像餐廳服務人員。每次回答控制在 120 字以內，除非使用者要求詳細說明。',
-    `目前日期：${today}，時區：${TIME_ZONE}。營業時間：${BUSINESS_HOURS}。`,
-    `營業地址：${CAFE_ADDRESS}`,
-    '餐廳特色：寵物友善、歡迎貓狗同行、可線上預約、提供中英文日文菜單、可以查看評論與客訴回饋。',
-    '若使用者要你直接建立、修改或取消預約，請說明目前只能協助查詢，正式操作請使用網站預約與會員中心。',
-    '不要編造未提供的地址、優惠、電話、付款方式、停車資訊或不存在的店家政策。',
-    availabilitySummary,
-  ].join('\n');
+  if (intent === 'menu') {
+    const menuResult = await fetchMenuItems(latestUserMessage.content);
+    return jsonResponse({ reply: buildMenuReply(menuResult), intent, mode: 'grounded-supabase' });
+  }
 
-  const conversation = messages
-    .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
-    .join('\n');
+  if (intent === 'store_knowledge') {
+    const knowledgeResult = await fetchKnowledgeItems(latestUserMessage.content);
+    return jsonResponse({ reply: buildKnowledgeReply(knowledgeResult), intent, mode: 'grounded-supabase' });
+  }
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${openAiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: getEnv('OPENAI_MODEL') || DEFAULT_MODEL,
-      instructions: systemPrompt,
-      input: conversation,
-      max_output_tokens: 450,
-      store: false,
-    }),
+  if (provider === 'none') {
+    return jsonResponse({ reply: buildNoneProviderReply(), intent, mode: 'free-fallback' });
+  }
+
+  return jsonResponse({
+    reply: '我目前可以幫你查店家資料、菜單與可預約時段；其他閒聊功能暫時還沒有開放。',
+    intent,
+    mode: 'free-fallback',
   });
-
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    return jsonResponse(
-      { error: data?.error?.message || 'OpenAI 回覆失敗，請稍後再試。' },
-      response.status,
-    );
-  }
-
-  const reply = extractOutputText(data);
-  if (!reply) {
-    return jsonResponse({ error: 'OpenAI 沒有回傳文字內容，請稍後再試。' }, 502);
-  }
-
-  return jsonResponse({ reply });
 };
