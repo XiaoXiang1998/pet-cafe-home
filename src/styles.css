@@ -966,6 +966,12 @@ textarea:focus {
   gap: 14px;
 }
 
+.admin-reservation-summary {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .admin-controls {
   display: grid;
   gap: 12px;
@@ -1416,6 +1422,10 @@ footer strong {
 
   .admin-calendar-card {
     position: static;
+  }
+
+  .admin-reservation-summary {
+    grid-template-columns: 1fr;
   }
 
   .hero {

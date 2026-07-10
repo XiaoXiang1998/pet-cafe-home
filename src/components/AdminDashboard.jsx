@@ -35,6 +35,7 @@ function AdminDashboard({
   onMenuFormChange,
 }) {
   const [calendarMonth, setCalendarMonth] = useState(getMonthKey(selectedDate));
+  const [reservationView, setReservationView] = useState('month');
   const monthDays = useMemo(() => buildMonthDays(calendarMonth), [calendarMonth]);
   const reservationCountByDate = useMemo(
     () =>
@@ -45,10 +46,14 @@ function AdminDashboard({
     [reservations],
   );
   const selectedReservations = reservations.filter((item) => item.reserve_date === selectedDate);
+  const monthReservations = reservations.filter((item) => item.reserve_date?.startsWith(calendarMonth));
+  const visibleReservations = reservationView === 'month' ? monthReservations : selectedReservations;
+  const reservationViewTitle = reservationView === 'month' ? `${calendarMonth} 全部預約` : `${selectedDate} 預約明細`;
 
   const handleMonthChange = (value) => {
     setCalendarMonth(value);
     if (!value) return;
+    setReservationView('month');
     onSelectedDateChange(`${value}-01`);
   };
 
@@ -88,7 +93,10 @@ function AdminDashboard({
                   className={selectedDate === dateText ? 'active' : ''}
                   key={dateText}
                   type="button"
-                  onClick={() => onSelectedDateChange(dateText)}
+                  onClick={() => {
+                    setReservationView('day');
+                    onSelectedDateChange(dateText);
+                  }}
                 >
                   <strong>{Number(dateText.slice(-2))}</strong>
                   <span>{reservationCountByDate[dateText] ?? 0} 筆</span>
@@ -98,13 +106,40 @@ function AdminDashboard({
           </article>
 
           <div className="admin-grid">
-            {selectedReservations.length === 0 && (
+            <article className="admin-card admin-reservation-summary">
+              <div>
+                <h3>{reservationViewTitle}</h3>
+                <p>
+                  {reservationView === 'month'
+                    ? `本月共 ${monthReservations.length} 筆；點選月曆日期可查看當日明細。`
+                    : `當日共 ${selectedReservations.length} 筆；可切換回本月全部預約。`}
+                </p>
+              </div>
+              <div className="admin-tabs" aria-label="預約檢視範圍">
+                <button
+                  className={reservationView === 'month' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setReservationView('month')}
+                >
+                  本月全部 ({monthReservations.length})
+                </button>
+                <button
+                  className={reservationView === 'day' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setReservationView('day')}
+                >
+                  當日明細 ({selectedReservations.length})
+                </button>
+              </div>
+            </article>
+
+            {visibleReservations.length === 0 && (
               <article className="admin-card">
-                <h3>{selectedDate}</h3>
-                <p>這一天目前沒有預約。</p>
+                <h3>{reservationViewTitle}</h3>
+                <p>{reservationView === 'month' ? '這個月目前沒有預約。' : '這一天目前沒有預約。'}</p>
               </article>
             )}
-            {selectedReservations.map((item) => (
+            {visibleReservations.map((item) => (
               <article className="admin-card" key={item.id}>
                 <div>
                   <span className="tag">{item.status}</span>
