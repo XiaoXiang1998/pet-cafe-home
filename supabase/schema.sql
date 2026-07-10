@@ -31,6 +31,8 @@ create table if not exists public.feedbacks (
   message text not null,
   status text not null default 'new',
   is_visible boolean not null default true,
+  admin_notes text,
+  handled_at timestamptz,
   created_at timestamptz default now()
 );
 
@@ -67,12 +69,16 @@ create table if not exists public.knowledge_items (
     )
   )
 );
+
 alter table public.profiles
   add column if not exists role text not null default 'user';
 
 alter table public.feedbacks
   add column if not exists status text not null default 'new',
-  add column if not exists is_visible boolean not null default true;
+  add column if not exists is_visible boolean not null default true,
+  add column if not exists admin_notes text,
+  add column if not exists handled_at timestamptz;
+
 alter table public.knowledge_items
   add column if not exists category text not null default 'faq',
   add column if not exists title text not null default '',
@@ -103,6 +109,7 @@ begin
     alter table public.feedbacks
       add constraint feedbacks_status_check check (status in ('new', 'reviewing', 'resolved', 'hidden'));
   end if;
+
   if not exists (
     select 1
     from pg_constraint
@@ -125,6 +132,84 @@ begin
   end if;
 end;
 $$;
+
+insert into public.knowledge_items (category, title, content, keywords, is_active)
+select category, title, content, keywords, true
+from (
+  values
+    (
+      'store_info',
+      '餐廳特色',
+      '小翔動物友善餐廳提供寬敞座位、寵物推車停放區、低刺激清潔流程與毛孩友善用餐動線。',
+      array['餐廳特色', '店家介紹', '寵物友善', '小翔餐廳']
+    ),
+    (
+      'business_hours',
+      '營業時間',
+      '營業時間目前以網站與 Google 商家頁最新公告為準。若需要確認特定日期，建議先透過店家聯絡方式確認。',
+      array['營業時間', '幾點', '開門', '開到', '公休']
+    ),
+    (
+      'address',
+      '地址與交通',
+      '地址目前尚未在資料庫設定正式門市地址；小幫手不會自行猜測。請以網站或店家正式公告為準。',
+      array['地址', '在哪', '位置', '交通', '停車']
+    ),
+    (
+      'pet_rules',
+      '可以帶哪些寵物',
+      '目前店家資料設定為歡迎貓狗同行。其他類型寵物建議先向店家確認，避免到場後無法入內。',
+      array['可以帶', '可帶寵物', '寵物同行', '貓', '狗', '其他寵物']
+    ),
+    (
+      'pet_rules',
+      '大型犬入內規則',
+      '大型犬可以同行，但請飼主全程看顧，並依現場狀況使用牽繩、推車或安排較不影響動線的位置。',
+      array['大型犬', '大狗', '牽繩', '推車', '寵物規則']
+    ),
+    (
+      'pet_rules',
+      '狗狗飲食安全',
+      '店內不建議也不提供狗狗食用巧克力。巧克力可能造成犬隻中毒，若狗狗誤食，請盡快聯絡獸醫。',
+      array['狗狗', '巧克力', '不能吃', '中毒', '獸醫', '狗狗飲食']
+    ),
+    (
+      'pet_rules',
+      '寵物友善規則',
+      '請飼主全程看顧毛孩，必要時使用牽繩、推車或外出籠，並避免影響其他客人。',
+      array['寵物', '毛孩', '規則', '牽繩', '外出籠']
+    ),
+    (
+      'reservation_rules',
+      '預約方式',
+      '可透過網站預約表單送出訂位需求。小幫手可以查詢可預約時段，但不會直接建立、修改或取消預約。',
+      array['預約', '訂位', '時段', '表單', '候位']
+    ),
+    (
+      'cancellation_rules',
+      '取消與改期',
+      '會員可在會員中心查看自己的預約；若預約狀態仍可取消，請使用會員中心的取消預約功能或聯絡店家協助。',
+      array['取消', '改期', '退訂', '會員中心', '預約紀錄']
+    ),
+    (
+      'policy',
+      '低消與用餐提醒',
+      '低消、用餐時間與現場座位規則以店家最新公告為準。若資料庫沒有明確設定，小幫手不會自行猜測金額或限制。',
+      array['低消', '用餐時間', '政策', '規定', '限制']
+    ),
+    (
+      'faq',
+      '小幫手可回答的問題',
+      '小幫手可以查詢預約可用時段、啟用中菜單品項，以及店家 FAQ、規則、地址與營業時間等資料庫已設定內容。',
+      array['FAQ', '小幫手', '可以問什麼', 'AI', '聊天']
+    )
+) as seed(category, title, content, keywords)
+where not exists (
+  select 1
+  from public.knowledge_items existing
+  where existing.category = seed.category
+    and existing.title = seed.title
+);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -179,7 +264,7 @@ as $$
   with slots as (
     select generate_series(
       timestamp '2000-01-01 10:00',
-      timestamp '2000-01-01 22:00',
+      timestamp '2000-01-01 21:00',
       interval '30 minutes'
     )::time as slot_time
   ),
@@ -343,6 +428,7 @@ for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
 create policy "Anyone can read active knowledge items"
 on public.knowledge_items
 for select
@@ -361,7 +447,7 @@ grant usage on schema public to anon, authenticated;
 grant select on public.feedbacks to anon;
 grant select on public.feedbacks to authenticated;
 grant insert on public.feedbacks to authenticated;
-grant update(status, is_visible) on public.feedbacks to authenticated;
+grant update(status, is_visible, admin_notes, handled_at) on public.feedbacks to authenticated;
 
 grant select on public.profiles to authenticated;
 grant update(nickname) on public.profiles to authenticated;

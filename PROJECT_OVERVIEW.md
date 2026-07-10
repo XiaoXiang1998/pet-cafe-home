@@ -219,15 +219,15 @@ flowchart TD
   F --> G[GmailApp.sendEmail 寄給管理者]
 ```
 
-目前已驗證：
+部署後驗證：
 
-- Apps Script webhook 可成功回傳 `sent`。
-- Netlify Function health check 已確認讀得到：
+- Apps Script webhook 必須回傳 `{ "status": "sent" }`。
+- Netlify Function health check 必須確認讀得到：
   - Supabase URL。
   - Supabase anon key。
   - Gmail webhook URL。
   - Gmail webhook secret。
-- User 預約後管理者已可收到信。
+- 以測試會員建立預約，確認管理者收到信；通知失敗時，會員端應仍保留成功建立的預約並顯示錯誤。
 
 ### 6.5 評論與客訴
 

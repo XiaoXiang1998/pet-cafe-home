@@ -18,7 +18,7 @@
 | 前端入口 | `src/main.jsx` | 掛載 React app 與全站樣式 |
 | 主要 UI / 流程 | `src/App.jsx` | 路由、登入、會員、預約、評價、菜單、管理後台、聊天 |
 | Supabase client | `src/supabaseClient.js` | 讀取 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 並建立 client |
-| Serverless API | `netlify/functions/chatbot.mts` | AI 客服、可預約時段查詢、Supabase grounded fallback |
+| Serverless API | `netlify/functions/*.mts` | AI 客服、可預約時段查詢與預約通知 |
 | 資料庫 schema | `supabase/schema.sql` | tables、RLS policies、RPC functions、trigger |
 | 部署設定 | `netlify.toml` | Vite build、Netlify Functions、SPA redirect |
 
@@ -38,9 +38,10 @@
 1. 使用者進入網站，React 依目前 URL 判斷 `home`、`member` 或 `admin` route。
 2. 若 Supabase 環境變數存在，前端會讀取 session 並監聽 auth state。
 3. 登入成功後載入 `profiles`；如果角色是 `admin`，額外載入管理後台資料。
-4. 會員建立預約或評價時，前端寫入 Supabase。RLS 會限制只能建立自己的資料；目前會員頁只顯示自己的預約，不提供自行取消按鈕。
-5. 管理員更新預約、評價或菜單時，前端寫入對應 table。RLS 透過 `is_admin()` 檢查權限。
-6. 使用者開啟 AI 客服時，前端呼叫 `/.netlify/functions/chatbot`；Function 依 intent 查詢可預約時段、啟用中菜單或店家知識資料。
+4. 會員建立預約或評價時，前端寫入 Supabase。RLS 會限制只能建立自己的資料；會員頁會依目前登入帳號篩選預約，並可取消 `pending` 或 `confirmed` 的預約。
+5. 預約建立後，前端呼叫 `/.netlify/functions/notify-reservation`；Function 用會員 JWT 讀取該筆預約，再透過 Google Apps Script 寄信給管理者。通知失敗不會回滾預約，但會顯示失敗原因。
+6. 管理員更新預約、評價或菜單時，前端寫入對應 table。RLS 透過 `is_admin()` 檢查權限。
+7. 使用者開啟 AI 客服時，前端呼叫 `/.netlify/functions/chatbot`；Function 依 intent 查詢可預約時段、啟用中菜單或店家知識資料。
 
 ## 本機執行
 
@@ -66,7 +67,17 @@ VITE_CHATBOT_ENDPOINT=/.netlify/functions/chatbot
 AI_PROVIDER=none
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5-nano
+GMAIL_NOTIFY_WEBHOOK_URL=https://script.google.com/macros/s/your-deployment-id/exec
+GMAIL_NOTIFY_SECRET=your-shared-webhook-secret
 ```
+
+在 Netlify Production 設定相同的 Supabase 與 Gmail 變數後，部署完成可檢查：
+
+```text
+https://pet-cafe-home.netlify.app/.netlify/functions/notify-reservation?health=1
+```
+
+預期 JSON 內的 `hasSupabaseUrl`、`hasSupabaseAnonKey`、`hasGmailWebhookUrl`、`hasGmailWebhookSecret` 都是 `true`。
 
 ## 已知狀況
 
