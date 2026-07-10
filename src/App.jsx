@@ -1,4 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import AccountModal from './components/AccountModal';
+import AdminDashboard from './components/AdminDashboard';
+import Chatbot from './components/Chatbot';
+import FeedbackSection from './components/FeedbackSection';
+import ReservationForm from './components/ReservationForm';
+import {
+  RESERVATION_TIME_OPTIONS,
+  buildAvailabilityByTime,
+  isAvailabilitySlotOpen,
+} from './lib/reservations';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 const FEEDBACK_PAGE_SIZE = 5;
@@ -16,6 +26,8 @@ const ADMIN_TABS = [
   { value: 'menu', label: '菜單' },
 ];
 const CHATBOT_ENDPOINT = import.meta.env.VITE_CHATBOT_ENDPOINT || '/.netlify/functions/chatbot';
+const NOTIFY_RESERVATION_ENDPOINT = '/.netlify/functions/notify-reservation';
+const UNAUTHORIZED_ROUTE_REDIRECT_DELAY = 2500;
 const INITIAL_CHAT_MESSAGES = [
   {
     role: 'assistant',
@@ -357,6 +369,7 @@ function App() {
   const [authUser, setAuthUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [authMessage, setAuthMessage] = useState('');
+  const [authInitialized, setAuthInitialized] = useState(!isSupabaseConfigured);
   const [authMode, setAuthMode] = useState('signin');
   const [emailAuth, setEmailAuth] = useState({
     email: '',
@@ -381,6 +394,9 @@ function App() {
     pet: 'dog',
   });
   const [reservationMessage, setReservationMessage] = useState('');
+  const [reservationAvailability, setReservationAvailability] = useState({});
+  const [reservationAvailabilityLoading, setReservationAvailabilityLoading] = useState(false);
+  const [reservationAvailabilityError, setReservationAvailabilityError] = useState('');
   const [myReservations, setMyReservations] = useState([]);
   const [language, setLanguage] = useState('zh');
   const [feedbackForm, setFeedbackForm] = useState({
@@ -411,6 +427,7 @@ function App() {
   const [adminTab, setAdminTab] = useState('reservations');
   const [adminMessage, setAdminMessage] = useState('');
   const [adminReservations, setAdminReservations] = useState([]);
+  const [adminSelectedDate, setAdminSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [adminFeedbacks, setAdminFeedbacks] = useState([]);
   const [adminProfiles, setAdminProfiles] = useState([]);
   const [adminMenuItems, setAdminMenuItems] = useState([]);
@@ -432,6 +449,7 @@ function App() {
     authUser.app_metadata?.provider === 'email' ||
     authUser.identities?.some((identity) => identity.provider === 'email');
   const isAdmin = profile?.role === 'admin' && !isPasswordRecovery;
+  const accountModalTitle = isPasswordRecovery ? '設定新密碼' : isLoggedIn ? '會員狀態' : '會員登入';
   const isHomeRoute = route === 'home';
   const isMemberRoute = route === 'member';
   const isAdminRoute = route === 'admin';
@@ -487,6 +505,7 @@ function App() {
     const { data, error } = await supabase
       .from('reservations')
       .select('id, reserve_date, reserve_time, phone, people, pet, status, created_at')
+      .eq('user_id', authUser.id)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -495,6 +514,65 @@ function App() {
     }
 
     setMyReservations(data ?? []);
+  };
+
+  const loadReservationAvailability = async (dateText) => {
+    if (!dateText) {
+      setReservationAvailability({});
+      setReservationAvailabilityError('');
+      return {};
+    }
+
+    if (!isSupabaseConfigured) {
+      setReservationAvailability({});
+      setReservationAvailabilityError('');
+      return {};
+    }
+
+    setReservationAvailabilityLoading(true);
+    setReservationAvailabilityError('');
+
+    const { data, error } = await supabase.rpc('get_reservation_availability', {
+      check_date: dateText,
+    });
+
+    setReservationAvailabilityLoading(false);
+
+    if (error) {
+      setReservationAvailability({});
+      setReservationAvailabilityError(`名額讀取失敗：${error.message}`);
+      return {};
+    }
+
+    const availabilityByTime = buildAvailabilityByTime(data ?? []);
+    setReservationAvailability(availabilityByTime);
+    return availabilityByTime;
+  };
+
+  const notifyReservationAdmin = async (reservationId) => {
+    if (!isSupabaseConfigured || !authUser || !reservationId) return 'skipped';
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) return 'skipped';
+
+    const response = await fetch(NOTIFY_RESERVATION_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reservationId }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || '通知寄送失敗');
+    }
+
+    return data.status ?? 'skipped';
   };
 
   const loadFeedbacks = async () => {
@@ -553,14 +631,14 @@ function App() {
   const loadAdminDashboard = async () => {
     if (!isSupabaseConfigured || !isAdmin) return;
 
-    const [reservationResult, feedbackResult, profileResult, menuResult] = await Promise.all([
+    const [reservationResult, initialFeedbackResult, profileResult, menuResult] = await Promise.all([
       supabase
         .from('reservations')
         .select('id, user_name, reserve_date, reserve_time, phone, people, pet, status, created_at')
         .order('created_at', { ascending: false }),
       supabase
         .from('feedbacks')
-        .select('id, type, rating, user_name, message, status, is_visible, created_at')
+        .select('id, type, rating, user_name, message, status, is_visible, admin_notes, handled_at, created_at')
         .order('created_at', { ascending: false }),
       supabase
         .from('profiles')
@@ -571,6 +649,14 @@ function App() {
         .select('id, labels, price, image, is_active, sort_order, created_at, updated_at')
         .order('sort_order', { ascending: true }),
     ]);
+
+    let feedbackResult = initialFeedbackResult;
+    if (feedbackResult.error && /admin_notes|handled_at/i.test(feedbackResult.error.message ?? '')) {
+      feedbackResult = await supabase
+        .from('feedbacks')
+        .select('id, type, rating, user_name, message, status, is_visible, created_at')
+        .order('created_at', { ascending: false });
+    }
 
     const firstError =
       reservationResult.error || feedbackResult.error || profileResult.error || menuResult.error;
@@ -614,6 +700,7 @@ function App() {
       const currentUser = data.session?.user ?? null;
       setAuthUser(currentUser);
       loadProfile(currentUser);
+      setAuthInitialized(true);
     });
 
     const {
@@ -622,6 +709,7 @@ function App() {
       const currentUser = session?.user ?? null;
       setAuthUser(currentUser);
       loadProfile(currentUser);
+      setAuthInitialized(true);
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
         setAuthMode('update-password');
@@ -653,6 +741,26 @@ function App() {
   }, [authUser]);
 
   useEffect(() => {
+    let ignore = false;
+
+    const refreshAvailability = async () => {
+      const availabilityByTime = await loadReservationAvailability(reservation.date);
+      if (ignore) return;
+
+      const selectedSlot = availabilityByTime[reservation.time];
+      if (reservation.time && selectedSlot && !isAvailabilitySlotOpen(selectedSlot)) {
+        setReservation((current) => ({ ...current, time: '' }));
+      }
+    };
+
+    refreshAvailability();
+
+    return () => {
+      ignore = true;
+    };
+  }, [reservation.date]);
+
+  useEffect(() => {
     setFeedbackPage((current) => (current > feedbackPageCount ? feedbackPageCount : current));
   }, [feedbackPageCount]);
 
@@ -664,6 +772,21 @@ function App() {
     if (isAdmin) loadAdminDashboard();
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!authInitialized) return undefined;
+
+    const shouldRedirectMember = isMemberRoute && !isLoggedIn;
+    const shouldRedirectAdmin = isAdminRoute && !isAdmin;
+
+    if (!shouldRedirectMember && !shouldRedirectAdmin) return undefined;
+
+    const timer = window.setTimeout(() => {
+      window.location.assign(`${window.location.origin}${getRoutePath('home')}`);
+    }, UNAUTHORIZED_ROUTE_REDIRECT_DELAY);
+
+    return () => window.clearTimeout(timer);
+  }, [authInitialized, isMemberRoute, isLoggedIn, isAdminRoute, isAdmin]);
+
   const navigateTo = (nextRoute) => {
     window.history.pushState({}, '', getRoutePath(nextRoute));
     setRoute(nextRoute);
@@ -674,6 +797,18 @@ function App() {
   const handleRouteClick = (event, nextRoute) => {
     event.preventDefault();
     navigateTo(nextRoute);
+  };
+
+  const handleReservationChange = (values) => {
+    setReservation((current) => ({ ...current, ...values }));
+  };
+
+  const handleFeedbackFormChange = (values) => {
+    setFeedbackForm((current) => ({ ...current, ...values }));
+  };
+
+  const handleAdminMenuFormChange = (values, replace = false) => {
+    setAdminMenuForm((current) => (replace ? values : { ...current, ...values }));
   };
 
   const handleProfileUpdate = async (event) => {
@@ -762,7 +897,25 @@ function App() {
   const updateFeedbackAdminFields = async (feedbackId, values) => {
     if (!isSupabaseConfigured || !isAdmin) return;
 
-    const { error } = await supabase.from('feedbacks').update(values).eq('id', feedbackId);
+    const payload = { ...values };
+    if (values.status) {
+      payload.handled_at = ['reviewing', 'resolved', 'hidden'].includes(values.status)
+        ? new Date().toISOString()
+        : null;
+    }
+
+    let { error } = await supabase.from('feedbacks').update(payload).eq('id', feedbackId);
+
+    if (error && /admin_notes|handled_at/i.test(error.message ?? '')) {
+      const fallbackPayload = { ...values };
+      delete fallbackPayload.admin_notes;
+      if (Object.keys(fallbackPayload).length === 0) {
+        setAdminMessage('目前資料庫尚未套用處理備註欄位，請先更新 schema。');
+        return;
+      }
+      const fallback = await supabase.from('feedbacks').update(fallbackPayload).eq('id', feedbackId);
+      error = fallback.error;
+    }
 
     if (error) {
       setAdminMessage(`回饋更新失敗：${error.message}`);
@@ -954,6 +1107,19 @@ function App() {
       return;
     }
 
+    if (!RESERVATION_TIME_OPTIONS.includes(reservation.time)) {
+      setReservationMessage('預約時間只開放營業時間內每 30 分鐘一格，請重新選擇時段。');
+      return;
+    }
+
+    const latestAvailability = await loadReservationAvailability(reservation.date);
+    const selectedSlot = latestAvailability[reservation.time];
+    if (selectedSlot && !isAvailabilitySlotOpen(selectedSlot)) {
+      setReservationMessage('這個時段目前已滿，請改選其他可預約時段。');
+      setReservation((current) => ({ ...current, time: '' }));
+      return;
+    }
+
     const phone = reservation.phone.trim();
 
     if (!phone) {
@@ -967,22 +1133,42 @@ function App() {
         return;
       }
 
-      const { error } = await supabase.from('reservations').insert({
-        user_id: authUser.id,
-        user_name: displayName,
-        reserve_date: reservation.date,
-        reserve_time: reservation.time,
-        phone,
-        people: reservation.people,
-        pet: reservation.pet,
-      });
+      const { data, error } = await supabase
+        .from('reservations')
+        .insert({
+          user_id: authUser.id,
+          user_name: displayName,
+          reserve_date: reservation.date,
+          reserve_time: reservation.time,
+          phone,
+          people: reservation.people,
+          pet: reservation.pet,
+        })
+        .select('id')
+        .single();
 
       if (error) {
         setReservationMessage(`預約失敗：${error.message}`);
         return;
       }
 
-      setReservationMessage('預約成功，已存入會員預約紀錄。');
+      let notifyStatus = 'skipped';
+      let notifyReason = '';
+      try {
+        notifyStatus = await notifyReservationAdmin(data?.id);
+      } catch (notifyError) {
+        notifyStatus = 'failed';
+        notifyReason = notifyError instanceof Error ? notifyError.message : '通知寄送失敗';
+        console.warn('Reservation notification failed:', notifyError);
+      }
+
+      setReservationMessage(
+        notifyStatus === 'sent'
+          ? '預約成功，已存入會員預約紀錄，並通知管理者。'
+          : notifyStatus === 'failed'
+            ? `預約成功，已存入會員預約紀錄，但管理者通知未送出：${notifyReason}`
+            : '預約成功，已存入會員預約紀錄，但管理者通知目前未送出。',
+      );
       setReservation((current) => ({ ...current, date: '', time: '', phone: '' }));
       loadReservations();
       return;
@@ -1015,6 +1201,9 @@ function App() {
 
     setReservationMessage('已取消預約。');
     loadReservations();
+    if (reservation.date) {
+      loadReservationAvailability(reservation.date);
+    }
   };
 
   const goToPhoto = (direction) => {
@@ -1159,7 +1348,8 @@ function App() {
             className="account-button"
             type="button"
             aria-expanded={accountOpen}
-            aria-label="會員選單"
+            aria-haspopup="dialog"
+            aria-label="開啟會員登入視窗"
             onClick={() => setAccountOpen((current) => !current)}
           >
             <span className="account-icon" aria-hidden="true">
@@ -1167,177 +1357,180 @@ function App() {
             </span>
             <strong>{isPasswordRecovery ? '設定新密碼' : isLoggedIn ? displayName : '登入'}</strong>
           </button>
-          {accountOpen && (
-            <div className="account-panel">
-              {isPasswordRecovery ? (
-                <>
-                  <p className="panel-title">設定新密碼</p>
-                  <form onSubmit={handlePasswordUpdate}>
-                    <label htmlFor="recoveryPassword">新密碼</label>
-                    <input
-                      id="recoveryPassword"
-                      type="password"
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                      placeholder="至少 6 個字元"
-                    />
-                    <button type="submit">變更密碼</button>
-                  </form>
-                  <small>密碼變更完成後，系統會登出並要求你重新登入。</small>
-                  {passwordMessage && <small className="auth-message">{passwordMessage}</small>}
-                </>
-              ) : isLoggedIn ? (
-                <>
-                  <p>
-                    目前登入：
-                    <strong>{displayName}</strong>
-                  </p>
-                  <button type="button" onClick={handleSignOut}>
-                    登出
-                  </button>
-                  <a
-                    className="panel-link"
-                    href={getRoutePath('member')}
-                    onClick={(event) => handleRouteClick(event, 'member')}
-                  >
-                    會員中心
-                  </a>
-                  {isAdmin && (
-                    <a
-                      className="panel-link"
-                      href={getRoutePath('admin')}
-                      onClick={(event) => handleRouteClick(event, 'admin')}
-                    >
-                      後台管理
-                    </a>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="panel-title">登入選項</p>
-                  {isSupabaseConfigured && (
-                    <>
-                      <div className="auth-tabs" role="tablist" aria-label="登入或註冊">
-                        <button
-                          className={authMode === 'signin' ? 'active' : ''}
-                          type="button"
-                          onClick={() => setAuthMode('signin')}
-                        >
-                          登入
-                        </button>
-                        <button
-                          className={authMode === 'signup' ? 'active' : ''}
-                          type="button"
-                          onClick={() => setAuthMode('signup')}
-                        >
-                          註冊
-                        </button>
-                      </div>
-                      <form onSubmit={handleEmailAuth}>
-                        <label htmlFor="authEmail">Email 帳號</label>
-                        <input
-                          id="authEmail"
-                          type="email"
-                          value={emailAuth.email}
-                          onChange={(event) =>
-                            setEmailAuth((current) => ({ ...current, email: event.target.value }))
-                          }
-                          placeholder="name@example.com"
-                        />
-                        <label htmlFor="authPassword">密碼</label>
-                        <input
-                          id="authPassword"
-                          type="password"
-                          value={emailAuth.password}
-                          onChange={(event) =>
-                            setEmailAuth((current) => ({
-                              ...current,
-                              password: event.target.value,
-                            }))
-                          }
-                          placeholder="至少 6 碼"
-                        />
-                        {authMode === 'signup' && (
-                          <>
-                            <label htmlFor="authNickname">暱稱</label>
-                            <input
-                              id="authNickname"
-                              value={emailAuth.nickname}
-                              onChange={(event) =>
-                                setEmailAuth((current) => ({
-                                  ...current,
-                                  nickname: event.target.value,
-                                }))
-                              }
-                              placeholder="例如：小翔"
-                            />
-                          </>
-                        )}
-                        <button type="submit">{authMode === 'signup' ? '建立帳號' : '登入'}</button>
-                      </form>
-                      {authMode === 'signin' && (
-                        <button
-                          type="button"
-                          className="resend-confirmation-button"
-                          onClick={handlePasswordResetRequest}
-                        >
-                          忘記密碼
-                        </button>
-                      )}
-                      {authMode === 'signup' && (
-                        <button
-                          type="button"
-                          className="resend-confirmation-button"
-                          onClick={handleResendConfirmation}
-                        >
-                          重寄驗證信
-                        </button>
-                      )}
-                      <div className="social-login">
-                        <span>或使用 Google</span>
-                        <button type="button" className="google-icon-button" aria-label="使用 Google 登入" onClick={handleGoogleLogin}>
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                              fill="#4285f4"
-                              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                            />
-                            <path
-                              fill="#34a853"
-                              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                            />
-                            <path
-                              fill="#fbbc05"
-                              d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"
-                            />
-                            <path
-                              fill="#ea4335"
-                              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06L5.84 9.9C6.71 7.3 9.14 5.38 12 5.38z"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                  {!isSupabaseConfigured && (
-                    <form onSubmit={handleLogin}>
-                      <label htmlFor="loginName">暱稱</label>
-                      <input
-                        id="loginName"
-                        value={loginName}
-                        onChange={(event) => setLoginName(event.target.value)}
-                        placeholder="例如：小翔"
-                      />
-                      <button type="submit">暫時登入</button>
-                      <small>尚未設定 Supabase 時，暫時登入只存在目前瀏覽器頁面。</small>
-                    </form>
-                  )}
-                </>
-              )}
-              {authMessage && <small className="auth-message">{authMessage}</small>}
-            </div>
-          )}
         </div>
       </nav>
+
+      <AccountModal
+        open={accountOpen}
+        title={accountModalTitle}
+        onClose={() => setAccountOpen(false)}
+        authMessage={authMessage}
+      >
+        {isPasswordRecovery ? (
+              <>
+                <p className="panel-title">設定新密碼</p>
+                <form onSubmit={handlePasswordUpdate}>
+                  <label htmlFor="recoveryPassword">新密碼</label>
+                  <input
+                    id="recoveryPassword"
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    placeholder="至少 6 個字元"
+                  />
+                  <button type="submit">變更密碼</button>
+                </form>
+                <small>密碼變更完成後，系統會登出並要求你重新登入。</small>
+                {passwordMessage && <small className="auth-message">{passwordMessage}</small>}
+              </>
+            ) : isLoggedIn ? (
+              <>
+                <p>
+                  目前登入：
+                  <strong>{displayName}</strong>
+                </p>
+                <button type="button" onClick={handleSignOut}>
+                  登出
+                </button>
+                <a
+                  className="panel-link"
+                  href={getRoutePath('member')}
+                  onClick={(event) => handleRouteClick(event, 'member')}
+                >
+                  會員中心
+                </a>
+                {isAdmin && (
+                  <a
+                    className="panel-link"
+                    href={getRoutePath('admin')}
+                    onClick={(event) => handleRouteClick(event, 'admin')}
+                  >
+                    後台管理
+                  </a>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="panel-title">登入選項</p>
+                {isSupabaseConfigured && (
+                  <>
+                    <div className="auth-tabs" role="tablist" aria-label="登入或註冊">
+                      <button
+                        className={authMode === 'signin' ? 'active' : ''}
+                        type="button"
+                        onClick={() => setAuthMode('signin')}
+                      >
+                        登入
+                      </button>
+                      <button
+                        className={authMode === 'signup' ? 'active' : ''}
+                        type="button"
+                        onClick={() => setAuthMode('signup')}
+                      >
+                        註冊
+                      </button>
+                    </div>
+                    <form onSubmit={handleEmailAuth}>
+                      <label htmlFor="authEmail">Email 帳號</label>
+                      <input
+                        id="authEmail"
+                        type="email"
+                        value={emailAuth.email}
+                        onChange={(event) =>
+                          setEmailAuth((current) => ({ ...current, email: event.target.value }))
+                        }
+                        placeholder="name@example.com"
+                      />
+                      <label htmlFor="authPassword">密碼</label>
+                      <input
+                        id="authPassword"
+                        type="password"
+                        value={emailAuth.password}
+                        onChange={(event) =>
+                          setEmailAuth((current) => ({
+                            ...current,
+                            password: event.target.value,
+                          }))
+                        }
+                        placeholder="至少 6 碼"
+                      />
+                      {authMode === 'signup' && (
+                        <>
+                          <label htmlFor="authNickname">暱稱</label>
+                          <input
+                            id="authNickname"
+                            value={emailAuth.nickname}
+                            onChange={(event) =>
+                              setEmailAuth((current) => ({
+                                ...current,
+                                nickname: event.target.value,
+                              }))
+                            }
+                            placeholder="例如：小翔"
+                          />
+                        </>
+                      )}
+                      <button type="submit">{authMode === 'signup' ? '建立帳號' : '登入'}</button>
+                    </form>
+                    {authMode === 'signin' && (
+                      <button
+                        type="button"
+                        className="resend-confirmation-button"
+                        onClick={handlePasswordResetRequest}
+                      >
+                        忘記密碼
+                      </button>
+                    )}
+                    {authMode === 'signup' && (
+                      <button
+                        type="button"
+                        className="resend-confirmation-button"
+                        onClick={handleResendConfirmation}
+                      >
+                        重寄驗證信
+                      </button>
+                    )}
+                    <div className="social-login">
+                      <span>或使用 Google</span>
+                      <button type="button" className="google-icon-button" aria-label="使用 Google 登入" onClick={handleGoogleLogin}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            fill="#4285f4"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="#34a853"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="#fbbc05"
+                            d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"
+                          />
+                          <path
+                            fill="#ea4335"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06L5.84 9.9C6.71 7.3 9.14 5.38 12 5.38z"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </>
+                )}
+                {!isSupabaseConfigured && (
+                  <form onSubmit={handleLogin}>
+                    <label htmlFor="loginName">暱稱</label>
+                    <input
+                      id="loginName"
+                      value={loginName}
+                      onChange={(event) => setLoginName(event.target.value)}
+                      placeholder="例如：小翔"
+                    />
+                    <button type="submit">暫時登入</button>
+                    <small>尚未設定 Supabase 時，暫時登入只存在目前瀏覽器頁面。</small>
+                  </form>
+                )}
+              </>
+            )}
+      </AccountModal>
 
       {isHomeRoute && (
         <>
@@ -1443,82 +1636,17 @@ function App() {
       </section>
 
       <section className="forms-section">
-        <article className="reservation-card" id="reserve">
-          <p className="section-kicker">Reservation</p>
-          <h2>預約訂位</h2>
-          <form onSubmit={handleReservation}>
-            <div className="field-row">
-              <label>
-                日期
-                <input
-                  type="date"
-                  min={minDate}
-                  value={reservation.date}
-                  onChange={(event) =>
-                    setReservation((current) => ({ ...current, date: event.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                時間
-                <input
-                  type="time"
-                  min="10:00"
-                  max="22:00"
-                  value={reservation.time}
-                  onChange={(event) =>
-                    setReservation((current) => ({ ...current, time: event.target.value }))
-                  }
-                />
-              </label>
-            </div>
-            <label>
-              聯絡電話
-              <input
-                type="tel"
-                inputMode="tel"
-                value={reservation.phone}
-                onChange={(event) =>
-                  setReservation((current) => ({ ...current, phone: event.target.value }))
-                }
-                placeholder="例如：0912-345-678"
-              />
-            </label>
-            <div className="field-row">
-              <label>
-                人數
-                <select
-                  value={reservation.people}
-                  onChange={(event) =>
-                    setReservation((current) => ({ ...current, people: event.target.value }))
-                  }
-                >
-                  <option value="1">1 位</option>
-                  <option value="2">2 位</option>
-                  <option value="3">3 位</option>
-                  <option value="4">4 位</option>
-                  <option value="5">5 位以上</option>
-                </select>
-              </label>
-              <label>
-                攜帶寵物
-                <select
-                  value={reservation.pet}
-                  onChange={(event) =>
-                    setReservation((current) => ({ ...current, pet: event.target.value }))
-                  }
-                >
-                  <option value="dog">狗狗</option>
-                  <option value="cat">貓貓</option>
-                  <option value="both">貓貓與狗狗</option>
-                  <option value="none">不攜帶寵物</option>
-                </select>
-              </label>
-            </div>
-            <button type="submit">送出預約</button>
-          </form>
-          {reservationMessage && <p className="reservation-message">{reservationMessage}</p>}
-        </article>
+        <ReservationForm
+          minDate={minDate}
+          reservation={reservation}
+          reservationMessage={reservationMessage}
+          timeOptions={RESERVATION_TIME_OPTIONS}
+          availabilityByTime={reservationAvailability}
+          availabilityLoading={reservationAvailabilityLoading}
+          availabilityError={reservationAvailabilityError}
+          onReservationChange={handleReservationChange}
+          onSubmit={handleReservation}
+        />
       </section>
 
         </>
@@ -1588,6 +1716,15 @@ function App() {
                     <span>
                       {item.people} 位 / {petLabels[item.pet] ?? item.pet} / {item.status}
                     </span>
+                    {(item.status === 'pending' || item.status === 'confirmed') && (
+                      <button
+                        className="cancel-reservation-button"
+                        type="button"
+                        onClick={() => handleCancelReservation(item.id)}
+                      >
+                        取消預約
+                      </button>
+                    )}
                   </article>
                 ))
               )}
@@ -1631,399 +1768,46 @@ function App() {
         </div>
       </section>
 
-      <section className="feedback-section" id="feedback">
-        <div className="section-heading">
-          <div>
-            <p className="section-kicker">Reviews & Complaints</p>
-            <h2>客訴與評論</h2>
-          </div>
-          <div className="feedback-filter" aria-label="回饋篩選">
-            {FEEDBACK_FILTERS.map((filter) => (
-              <button
-                className={feedbackFilter === filter.value ? 'active' : ''}
-                key={filter.value}
-                type="button"
-                onClick={() => setFeedbackFilter(filter.value)}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="feedback-layout">
-          <article className="feedback-card">
-            <h3>留下你的回饋</h3>
-            <form onSubmit={handleFeedbackSubmit}>
-              <label>
-                類型
-                <select
-                  value={feedbackForm.type}
-                  onChange={(event) =>
-                    setFeedbackForm((current) => ({ ...current, type: event.target.value }))
-                  }
-                >
-                  <option value="review">評論</option>
-                  <option value="complaint">客訴</option>
-                </select>
-              </label>
-
-              <label>
-                評分
-                <div className="rating-stars" role="radiogroup" aria-label="評分星等">
-                  {[1, 2, 3, 4, 5].map((score) => (
-                    <button
-                      className={score <= feedbackForm.rating ? 'active' : ''}
-                      key={score}
-                      type="button"
-                      role="radio"
-                      aria-checked={feedbackForm.rating === score}
-                      onClick={() =>
-                        setFeedbackForm((current) => ({ ...current, rating: score }))
-                      }
-                    >
-                      ★
-                    </button>
-                  ))}
-                  <span>{feedbackForm.rating} / 5</span>
-                </div>
-              </label>
-
-              <label>
-                內容
-                <textarea
-                  rows="5"
-                  value={feedbackForm.message}
-                  onChange={(event) =>
-                    setFeedbackForm((current) => ({ ...current, message: event.target.value }))
-                  }
-                  placeholder="請輸入評論或客訴內容"
-                />
-              </label>
-
-              <button type="submit">送出回饋</button>
-            </form>
-            {feedbackMessage && <p className="feedback-message">{feedbackMessage}</p>}
-          </article>
-
-          <div className="feedback-list" aria-label="評論與客訴列表">
-            {paginatedFeedbackEntries.map((entry) => (
-              <article className="feedback-item" key={entry.id}>
-                <div className="feedback-item-head">
-                  <span className={entry.type === 'complaint' ? 'tag complaint' : 'tag'}>
-                    {entry.type === 'complaint' ? '客訴' : '評論'}
-                  </span>
-                  <div className="readonly-stars" aria-label={`${entry.rating} 顆星`}>
-                    {'★'.repeat(entry.rating)}
-                  </div>
-                </div>
-                <h3>{entry.name}</h3>
-                <p>{entry.message}</p>
-              </article>
-            ))}
-            {feedbackPageCount > 1 && (
-              <nav className="feedback-pagination" aria-label="評論分頁">
-                <button
-                  type="button"
-                  onClick={() => setFeedbackPage((current) => Math.max(1, current - 1))}
-                  disabled={currentFeedbackPage === 1}
-                >
-                  上一頁
-                </button>
-                <div className="feedback-page-numbers">
-                  {Array.from({ length: feedbackPageCount }, (_, index) => {
-                    const page = index + 1;
-
-                    return (
-                      <button
-                        className={page === currentFeedbackPage ? 'active' : ''}
-                        key={page}
-                        type="button"
-                        aria-label={`第 ${page} 頁`}
-                        aria-current={page === currentFeedbackPage ? 'page' : undefined}
-                        onClick={() => setFeedbackPage(page)}
-                      >
-                        {page}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFeedbackPage((current) => Math.min(feedbackPageCount, current + 1))
-                  }
-                  disabled={currentFeedbackPage === feedbackPageCount}
-                >
-                  下一頁
-                </button>
-              </nav>
-            )}
-          </div>
-        </div>
-      </section>
+      <FeedbackSection
+        filters={FEEDBACK_FILTERS}
+        feedbackFilter={feedbackFilter}
+        feedbackForm={feedbackForm}
+        feedbackMessage={feedbackMessage}
+        feedbackEntries={paginatedFeedbackEntries}
+        feedbackPageCount={feedbackPageCount}
+        currentFeedbackPage={currentFeedbackPage}
+        onFilterChange={setFeedbackFilter}
+        onFormChange={handleFeedbackFormChange}
+        onSubmit={handleFeedbackSubmit}
+        onPageChange={setFeedbackPage}
+      />
 
         </>
       )}
 
       {isAdminRoute && isAdmin && (
-        <section className="admin-section" id="admin">
-          <div className="section-heading">
-            <div>
-              <p className="section-kicker">Admin Console</p>
-              <h2>後台管理</h2>
-            </div>
-            <div className="admin-tabs" role="tablist" aria-label="後台分頁">
-              {ADMIN_TABS.map((tab) => (
-                <button
-                  className={adminTab === tab.value ? 'active' : ''}
-                  key={tab.value}
-                  type="button"
-                  onClick={() => setAdminTab(tab.value)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {adminMessage && <p className="admin-message">{adminMessage}</p>}
-
-          {adminTab === 'reservations' && (
-            <div className="admin-grid">
-              {adminReservations.map((item) => (
-                <article className="admin-card" key={item.id}>
-                  <div>
-                    <span className="tag">{item.status}</span>
-                    <h3>{item.user_name}</h3>
-                    <p>
-                      {item.reserve_date} {item.reserve_time} / {item.people} 位 /{' '}
-                      {petLabels[item.pet] ?? item.pet}
-                    </p>
-                    <p>電話：{item.phone || '未提供'}</p>
-                  </div>
-                  <select
-                    value={item.status}
-                    onChange={(event) => updateReservationStatus(item.id, event.target.value)}
-                  >
-                    {RESERVATION_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {adminTab === 'feedbacks' && (
-            <div className="admin-grid">
-              {adminFeedbacks.map((entry) => (
-                <article className="admin-card" key={entry.id}>
-                  <div>
-                    <span className={entry.type === 'complaint' ? 'tag complaint' : 'tag'}>
-                      {entry.type === 'complaint' ? '客訴' : '評論'}
-                    </span>
-                    <h3>{entry.user_name}</h3>
-                    <p>{entry.message}</p>
-                  </div>
-                  <div className="admin-controls">
-                    <label>
-                      狀態
-                      <select
-                        value={entry.status ?? 'new'}
-                        onChange={(event) =>
-                          updateFeedbackAdminFields(entry.id, { status: event.target.value })
-                        }
-                      >
-                        {FEEDBACK_STATUSES.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="checkbox-row">
-                      <input
-                        checked={entry.is_visible ?? true}
-                        type="checkbox"
-                        onChange={(event) =>
-                          updateFeedbackAdminFields(entry.id, {
-                            is_visible: event.target.checked,
-                          })
-                        }
-                      />
-                      前台顯示
-                    </label>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {adminTab === 'members' && (
-            <div className="admin-grid">
-              {adminProfiles.map((member) => (
-                <article className="admin-card" key={member.id}>
-                  <span className="tag">{member.role}</span>
-                  <h3>{member.nickname || '未命名會員'}</h3>
-                  <p>{member.email}</p>
-                  <p>建立時間：{member.created_at ? new Date(member.created_at).toLocaleString() : '-'}</p>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {adminTab === 'menu' && (
-            <div className="admin-menu-layout">
-              <article className="admin-card">
-                <h3>{adminMenuForm.id ? '編輯菜單品項' : '新增菜單品項'}</h3>
-                <form onSubmit={handleAdminMenuSubmit}>
-                  <div className="field-row">
-                    <label>
-                      中文名稱
-                      <input
-                        value={adminMenuForm.zhName}
-                        onChange={(event) =>
-                          setAdminMenuForm((current) => ({ ...current, zhName: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      英文名稱
-                      <input
-                        value={adminMenuForm.enName}
-                        onChange={(event) =>
-                          setAdminMenuForm((current) => ({ ...current, enName: event.target.value }))
-                        }
-                      />
-                    </label>
-                  </div>
-                  <label>
-                    中文描述
-                    <textarea
-                      value={adminMenuForm.zhDescription}
-                      onChange={(event) =>
-                        setAdminMenuForm((current) => ({
-                          ...current,
-                          zhDescription: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    英文描述
-                    <textarea
-                      value={adminMenuForm.enDescription}
-                      onChange={(event) =>
-                        setAdminMenuForm((current) => ({
-                          ...current,
-                          enDescription: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    日文名稱
-                    <input
-                      value={adminMenuForm.jaName}
-                      onChange={(event) =>
-                        setAdminMenuForm((current) => ({ ...current, jaName: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    日文描述
-                    <textarea
-                      value={adminMenuForm.jaDescription}
-                      onChange={(event) =>
-                        setAdminMenuForm((current) => ({
-                          ...current,
-                          jaDescription: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <div className="field-row">
-                    <label>
-                      價格
-                      <input
-                        min="0"
-                        type="number"
-                        value={adminMenuForm.price}
-                        onChange={(event) =>
-                          setAdminMenuForm((current) => ({ ...current, price: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      排序
-                      <input
-                        type="number"
-                        value={adminMenuForm.sortOrder}
-                        onChange={(event) =>
-                          setAdminMenuForm((current) => ({
-                            ...current,
-                            sortOrder: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                  </div>
-                  <label>
-                    圖片 URL
-                    <input
-                      value={adminMenuForm.image}
-                      onChange={(event) =>
-                        setAdminMenuForm((current) => ({ ...current, image: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="checkbox-row">
-                    <input
-                      checked={adminMenuForm.isActive}
-                      type="checkbox"
-                      onChange={(event) =>
-                        setAdminMenuForm((current) => ({
-                          ...current,
-                          isActive: event.target.checked,
-                        }))
-                      }
-                    />
-                    前台上架
-                  </label>
-                  <div className="admin-form-actions">
-                    <button type="submit">{adminMenuForm.id ? '更新品項' : '新增品項'}</button>
-                    {adminMenuForm.id && (
-                      <button
-                        type="button"
-                        onClick={() => setAdminMenuForm(createEmptyMenuForm())}
-                      >
-                        取消編輯
-                      </button>
-                    )}
-                  </div>
-                </form>
-              </article>
-
-              <div className="admin-grid">
-                {adminMenuItems.map((item) => (
-                  <article className="admin-card" key={item.id}>
-                    <span className={item.isActive ? 'tag' : 'tag complaint'}>
-                      {item.isActive ? '上架' : '隱藏'}
-                    </span>
-                    <h3>{item.labels.zh.name}</h3>
-                    <p>NT$ {item.price} / 排序 {item.sortOrder}</p>
-                    <button type="button" onClick={() => setAdminMenuForm(menuFormFromItem(item))}>
-                      編輯
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
+        <AdminDashboard
+          tabs={ADMIN_TABS}
+          activeTab={adminTab}
+          message={adminMessage}
+          reservations={adminReservations}
+          selectedDate={adminSelectedDate}
+          reservationStatuses={RESERVATION_STATUSES}
+          feedbackStatuses={FEEDBACK_STATUSES}
+          feedbacks={adminFeedbacks}
+          profiles={adminProfiles}
+          menuItems={adminMenuItems}
+          menuForm={adminMenuForm}
+          petLabels={petLabels}
+          createEmptyMenuForm={createEmptyMenuForm}
+          menuFormFromItem={menuFormFromItem}
+          onTabChange={setAdminTab}
+          onSelectedDateChange={setAdminSelectedDate}
+          onReservationStatusChange={updateReservationStatus}
+          onFeedbackUpdate={updateFeedbackAdminFields}
+          onMenuSubmit={handleAdminMenuSubmit}
+          onMenuFormChange={handleAdminMenuFormChange}
+        />
       )}
 
       {isMemberRoute && !isLoggedIn && (
@@ -2044,59 +1828,17 @@ function App() {
         </section>
       )}
 
-      <section className={`chatbot ${chatOpen ? 'open' : ''}`} aria-label="AI 聊天小幫手">
-        {chatOpen && (
-          <article className="chatbot-panel">
-            <header className="chatbot-header">
-              <div>
-                <strong>小翔 AI 小幫手</strong>
-                <span>可查詢預約時段與餐廳資訊</span>
-              </div>
-              <button type="button" aria-label="關閉 AI 聊天小幫手" onClick={() => setChatOpen(false)}>
-                ×
-              </button>
-            </header>
-
-            <div className="chatbot-messages" aria-live="polite">
-              {chatMessages.map((entry, index) => (
-                <div className={`chatbot-message ${entry.role}`} key={`${entry.role}-${index}`}>
-                  {entry.text}
-                </div>
-              ))}
-              {chatLoading && <div className="chatbot-message assistant">正在確認資訊...</div>}
-            </div>
-
-            {chatError && <p className="chatbot-error">{chatError}</p>}
-
-            <form className="chatbot-form" onSubmit={handleChatSubmit}>
-              <label className="sr-only" htmlFor="chatbot-input">
-                輸入想詢問小翔 AI 小幫手的問題
-              </label>
-              <input
-                id="chatbot-input"
-                type="text"
-                value={chatInput}
-                placeholder="例：5/14 還有哪些時間可以預約？"
-                disabled={chatLoading}
-                onChange={(event) => setChatInput(event.target.value)}
-              />
-              <button type="submit" disabled={chatLoading || !chatInput.trim()}>
-                送出
-              </button>
-            </form>
-          </article>
-        )}
-
-        <button
-          className="chatbot-toggle"
-          type="button"
-          aria-expanded={chatOpen}
-          aria-label="開啟 AI 聊天小幫手"
-          onClick={() => setChatOpen((current) => !current)}
-        >
-          AI
-        </button>
-      </section>
+      <Chatbot
+        open={chatOpen}
+        messages={chatMessages}
+        input={chatInput}
+        loading={chatLoading}
+        error={chatError}
+        onToggle={() => setChatOpen((current) => !current)}
+        onClose={() => setChatOpen(false)}
+        onInputChange={setChatInput}
+        onSubmit={handleChatSubmit}
+      />
 
       <footer>
         <strong>小翔動物友善餐廳</strong>

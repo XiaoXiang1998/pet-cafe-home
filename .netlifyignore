@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.git/
+.netlify/
+.env
+.env.*
+!.env.example
+petcafe-104-portfolio-video/
